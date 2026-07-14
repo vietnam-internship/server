@@ -43,7 +43,7 @@ spring:
         use_sql_comments: false
   threads:
     virtual:
-      enabled: ${VIRTUAL_THREADS_ENABLED:false}
+      enabled: ${VIRTUAL_THREADS_ENABLED:true}
   task:
     execution:
       pool:
@@ -53,17 +53,6 @@ spring:
   devtools:
     restart:
       enabled: false
-  ai:
-    openai:
-      api-key: ${OPENAI_API_KEY:}
-      embedding:
-        model: text-embedding-3-small
-    vectorstore:
-      qdrant:
-        host: ${QDRANT_HOST:localhost}
-        port: ${QDRANT_PORT:6334}
-        collection-name: ${NOTICE_VECTOR_COLLECTION:official-notices}
-        initialize-schema: true
 
 management:
   endpoints:
@@ -73,80 +62,26 @@ management:
   endpoint:
     health:
       show-details: never
+      probes:
+        enabled: true
 
 logging:
+  config: classpath:logback/logback-${spring.profiles.active:local}.xml
   file:
     name: ${LOG_FILE_PATH:./logs/app.log}
-  level:
-    kr.ac.knu.comit.global.auth: ${LOG_LEVEL_AUTH:WARN}
 
-comit:
-  web:
-    cors:
-      allowed-origins: ${COMIT_WEB_CORS_ALLOWED_ORIGINS:http://localhost:5173,https://knu-cse-comit-client.vercel.app,https://chcse.knu.ac.kr}
-  dev:
-    auth:
-      enabled: ${COMIT_DEV_AUTH_ENABLED:false}
-      cookie-same-site: ${COMIT_DEV_AUTH_COOKIE_SAME_SITE:None}
-  auth:
-    bridge:
-      enabled: ${COMIT_AUTH_BRIDGE_ENABLED:false}
-    sso:
-      enabled: ${COMIT_AUTH_SSO_ENABLED:false}
-      auth-server-base-url: ${COMIT_AUTH_SSO_AUTH_SERVER_BASE_URL:https://chcse.knu.ac.kr/appfn/api}
-      client-id: ${COMIT_AUTH_SSO_CLIENT_ID:}
-      client-secret: ${COMIT_AUTH_SSO_CLIENT_SECRET:}
-      issuer: ${COMIT_AUTH_SSO_ISSUER:https://chcse.knu.ac.kr/appfn/api}
-      redirect-uri: ${COMIT_AUTH_SSO_REDIRECT_URI:}
-      allowed-redirect-uris: ${COMIT_AUTH_SSO_ALLOWED_REDIRECT_URIS:https://chcse.knu.ac.kr,https://knu-cse-comit-client.vercel.app,https://comit-sso-smoke.vercel.app,http://localhost:5173}
-      redirect-uri-cookie-name: ${COMIT_AUTH_SSO_REDIRECT_URI_COOKIE_NAME:comit-redirect-uri}
-      frontend-success-url: ${COMIT_AUTH_SSO_FRONTEND_SUCCESS_URL:http://localhost:5173}
-      frontend-register-url: ${COMIT_AUTH_SSO_FRONTEND_REGISTER_URL:http://localhost:5173/register}
-      frontend-error-url: ${COMIT_AUTH_SSO_FRONTEND_ERROR_URL:http://localhost:5173/error}
-      token-cookie-name: ${COMIT_AUTH_SSO_TOKEN_COOKIE_NAME:COMIT_SSO_TOKEN}
-      state-cookie-name: ${COMIT_AUTH_SSO_STATE_COOKIE_NAME:COMIT_SSO_STATE}
-      state-ttl-seconds: ${COMIT_AUTH_SSO_STATE_TTL_SECONDS:300}
-      token-max-age-seconds: ${COMIT_AUTH_SSO_TOKEN_MAX_AGE_SECONDS:3600}
-      cookie-path: ${COMIT_AUTH_SSO_COOKIE_PATH:/}
-      cookie-secure: ${COMIT_AUTH_SSO_COOKIE_SECURE:true}
-      cookie-same-site: ${COMIT_AUTH_SSO_COOKIE_SAME_SITE:None}
-  post:
-    preview:
-      max-lines: ${COMIT_POST_PREVIEW_MAX_LINES:2}
-    hot:
-      window-days: ${COMIT_POST_HOT_WINDOW_DAYS:7}
-      like-weight: ${COMIT_POST_HOT_LIKE_WEIGHT:5}
-      comment-weight: ${COMIT_POST_HOT_COMMENT_WEIGHT:3}
-      visitor-weight: ${COMIT_POST_HOT_VISITOR_WEIGHT:2}
-      limit: ${COMIT_POST_HOT_LIMIT:5}
-      excluded-board-types: ${COMIT_POST_HOT_EXCLUDED_BOARD_TYPES:NOTICE,EVENT}
-  night-snack:
-    reserved-capacity-ratio: ${COMIT_NIGHT_SNACK_RESERVED_CAPACITY_RATIO:0.1}
-    reservation-strategy: ${COMIT_NIGHT_SNACK_RESERVATION_STRATEGY:time-based}
-  notice:
-    rag:
-      retrieval-top-k: ${NOTICE_RETRIEVAL_TOP_K:7}
-      query-transform-threshold: ${NOTICE_QUERY_TRANSFORM_THRESHOLD:0.75}
-      query-transform-model: ${NOTICE_QUERY_TRANSFORM_MODEL:gpt-4.1-nano}
-      rerank-model: ${NOTICE_RERANK_MODEL:gpt-4.1-mini}
-      answer-nano-model: ${NOTICE_ANSWER_NANO_MODEL:gpt-4.1-nano}
-      answer-mini-model: ${NOTICE_ANSWER_MINI_MODEL:gpt-4o-mini}
-      answer-model: ${NOTICE_ANSWER_MODEL:gpt-4o}
-      summarizer-model: ${NOTICE_SUMMARIZER_MODEL:gpt-4o-mini}
-      chat-openai-timeout: ${NOTICE_CHAT_OPENAI_TIMEOUT:15s}
-      chat-max-concurrency: ${NOTICE_CHAT_MAX_CONCURRENCY:5}
-      chat-acquire-timeout-seconds: ${NOTICE_CHAT_ACQUIRE_TIMEOUT_SECONDS:1}
-      chat-response-timeout-seconds: ${NOTICE_CHAT_RESPONSE_TIMEOUT_SECONDS:30}
-    scheduler:
-      enabled: ${NOTICE_SCHEDULER_ENABLED:true}
-      initial-sync-max: ${NOTICE_INITIAL_SYNC_MAX:200}
-      latest-sync-max-pages: ${NOTICE_LATEST_SYNC_MAX_PAGES:3}
-      reindex-embeddings-on-startup: ${NOTICE_REINDEX_EMBEDDINGS_ON_STARTUP:false}
-      reindex-embeddings-limit: ${NOTICE_REINDEX_EMBEDDINGS_LIMIT:0}
-  storage:
-    s3:
-      bucket-name: ${S3_BUCKET_NAME:}
-      region: ${S3_REGION:ap-northeast-2}
-      access-key: ${S3_ACCESS_KEY:}
-      secret-key: ${S3_SECRET_KEY:}
-      base-url: ${S3_BASE_URL:}
+springdoc:
+  packages-to-scan: com.fptis.intern.server
+  default-consumes-media-type: application/json;charset=UTF-8
+  default-produces-media-type: application/json;charset=UTF-8
+  cache:
+    disabled: true
+  api-docs:
+    path: /api-docs/json
+    groups:
+      enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger
+    tags-sorter: alpha
+    operations-sorter: alpha
