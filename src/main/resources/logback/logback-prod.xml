@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- prod: 콘솔 + 비동기 파일(30일 보관), INFO 기준 / 소음 라이브러리 WARN -->
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+  <property name="LOG_PATH" value="${LOG_FILE_PATH:-/app/logs/app.log}"/>
+
+  <!-- 컨테이너 로그 수집(stdout) 대상 - %clr은 TTY가 아니면 자동으로 색상 미적용 -->
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint}|%clr(%-5level)|%clr(%-40.40logger{39}){cyan}|%m%n%ex{10}</pattern>
+      <charset>UTF-8</charset>
+    </encoder>
+  </appender>
+
+  <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_PATH}</file>
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS}|%-5level|%-40.40logger{39}|%m%n%ex</pattern>
+      <charset>UTF-8</charset>
+    </encoder>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <fileNamePattern>${LOG_PATH}.%d{yyyy-MM-dd}.%i.gz</fileNamePattern>
+      <maxFileSize>100MB</maxFileSize>
+      <maxHistory>30</maxHistory>
+      <totalSizeCap>3GB</totalSizeCap>
+    </rollingPolicy>
+  </appender>
+
+  <!-- 파일 쓰기가 요청 스레드를 막지 않도록 비동기 처리 -->
+  <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+    <appender-ref ref="FILE"/>
+    <queueSize>512</queueSize>
+    <!-- 큐가 가득 차도 DEBUG/TRACE를 버리지 않음 (0 = 유실 없음) -->
+    <discardingThreshold>0</discardingThreshold>
+  </appender>
+
+  <!-- 애플리케이션 -->
+  <logger name="com.fptis.intern.server" level="INFO"/>
+
+  <!-- 프레임워크 소음 억제: ERROR는 커넥션 풀 경고 등 운영 신호까지 가리므로 WARN -->
+  <logger name="org.springframework.web" level="WARN"/>
+  <logger name="com.zaxxer.hikari" level="WARN"/>
+  <logger name="org.hibernate" level="WARN"/>
+
+  <root level="INFO">
+    <appender-ref ref="STDOUT"/>
+    <appender-ref ref="ASYNC_FILE"/>
+  </root>
+</configuration>
