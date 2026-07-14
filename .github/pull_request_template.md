@@ -1,33 +1,33 @@
-### 관련 이슈
+### Related Issues
 - resolves #
 
 ---
 
-### 변경 유형
-- [ ] 코드 / 기능 / 버그픽스
-- [ ] 인프라 / CI / 빌드
-- [ ] 문서 (별도 PR + `문서` 라벨 권장)
+### Type of Change
+- [ ] Code / Feature / Bugfix
+- [ ] Infrastructure / CI / Build
+- [ ] Documentation (Separate PR + `Documentation` label recommended)
 
-> 📄 **문서 분리 컨벤션:** 코드 PR에 `docs/` 변경을 섞지 않는다. 문서는 별도 PR로 올리고 `문서` 라벨을 단다.
-> 예외: 이 변경을 설명하는 ADR, 또는 이 변경으로 사실이 바뀌는 기존 문서의 정정은 함께 올려도 된다.
+> 📄 **Documentation Separation Convention:** Do not mix `docs/` changes in code PRs. Documentation should be submitted as a separate PR with the `Documentation` label.
+> Exception: An ADR describing this change, or corrections to existing documentation that is invalidated by this change, can be uploaded together.
 
 ---
 
-### 변경 요약
-> 무엇을, 왜 바꿨는지 2-3줄로.
+### Change Summary
+> Describe what you changed and why in 2-3 lines.
 
 -
 
 ---
 
-### 의사결정
-> 이 방식을 택한 이유. 고려했지만 버린 대안이 있다면 한 줄 이유와 함께.
+### Decisions
+> The reason for choosing this approach. If there is an alternative you considered but discarded, list it with a one-line explanation.
 
 -
 
 ---
 
-### 리뷰 포인트
-> 리뷰어가 집중해야 할 부분. 의도가 자명하지 않은 코드·설계는 여기에 설명해 주세요.
+### Review Points
+> Areas the reviewer should focus on. Please explain any code or design whose intent is not self-evident here.
 
 -

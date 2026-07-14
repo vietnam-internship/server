@@ -38,3 +38,12 @@ out/
 ### VS Code ###
 .vscode/
 
+### Kubernetes ###
+k8s/overlays/*/secret.env
+~$*
+
+.env.local
+.env.prod
+.env.staging
+
+./logs/
