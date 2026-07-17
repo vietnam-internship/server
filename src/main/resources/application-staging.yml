@@ -1,31 +1,8 @@
-server:
-  forward-headers-strategy: framework
-
-spring:
-  threads:
-    virtual:
-      enabled: ${VIRTUAL_THREADS_ENABLED:true}
-  flyway:
-    locations:
-      - classpath:db/migration
-      - classpath:db/seed
-
-logging:
-  file:
-    name: ${LOG_FILE_PATH:/app/logs/app-staging.log}
-
-comit:
-  load-test:
-    enabled: ${COMIT_LOAD_TEST_ENABLED:false}
+travelx:
+  web:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   dev:
     auth:
-      enabled: ${COMIT_DEV_AUTH_ENABLED:false}
-      cookie-same-site: ${COMIT_DEV_AUTH_COOKIE_SAME_SITE:None}
-  auth:
-    bridge:
-      enabled: ${COMIT_AUTH_BRIDGE_ENABLED:true}
-    sso:
-      enabled: ${COMIT_AUTH_SSO_ENABLED:false}
-      frontend-success-url: ${COMIT_AUTH_SSO_FRONTEND_SUCCESS_URL:https://chcse.knu.ac.kr/comit-staging}
-      frontend-error-url: ${COMIT_AUTH_SSO_FRONTEND_ERROR_URL:https://chcse.knu.ac.kr/comit-staging/error}
-      cookie-path: ${COMIT_AUTH_SSO_COOKIE_PATH:/}
+      enabled: ${DEV_AUTH_ENABLED:false}
+      cookie-same-site: ${AUTH_COOKIE_SAME_SITE:None}
