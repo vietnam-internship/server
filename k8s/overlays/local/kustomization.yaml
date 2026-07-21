@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - mysql.yaml
+
+images:
+  - name: travelx-server:local
+    newName: travelx-server
+    newTag: local
+
+configMapGenerator:
+  - name: travelx-server-config
+    envs:
+      - configmap.env
+
+secretGenerator:
+  - name: travelx-server-secret
+    envs:
+      - secret.env
+
+generatorOptions:
+  disableNameSuffixHash: true
