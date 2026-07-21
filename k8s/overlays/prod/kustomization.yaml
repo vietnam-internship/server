@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+
+images:
+  - name: travelx-server:local
+    newName: ghcr.io/vietnam-internship/server
+    newTag: latest
+
+configMapGenerator:
+  - name: travelx-server-config
+    envs:
+      - configmap.env
+
+# DB_HOST/DB_PORT/DB_URL/DB_USERNAME/DB_PASSWORD는 RDS 값이라 여기서 생성하지 않는다.
+# 배포 전에 아래 명령으로 실제 클러스터에 한 번 등록해둔다 (git에는 올리지 않음):
+#   kubectl create secret generic travelx-server-secret \
+#     --from-literal=DB_HOST=<rds-endpoint> \
+#     --from-literal=DB_PORT=3306 \
+#     --from-literal=DB_URL=jdbc:mysql://<rds-endpoint>:3306/travelx \
+#     --from-literal=DB_USERNAME=<user> \
+#     --from-literal=DB_PASSWORD=<password>
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+patches:
+  - target:
+      kind: Deployment
+      name: travelx-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always

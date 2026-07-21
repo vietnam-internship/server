@@ -6,3 +6,8 @@ travelx:
     auth:
       enabled: ${DEV_AUTH_ENABLED:false}
       cookie-same-site: ${AUTH_COOKIE_SAME_SITE:None}
+  oauth:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID}
+      client-secret: ${GOOGLE_CLIENT_SECRET}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:5173/auth/callback}

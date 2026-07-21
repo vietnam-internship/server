@@ -1,0 +1,2 @@
+ALTER TABLE users
+    ADD COLUMN phone_verified TINYINT(1) NOT NULL DEFAULT 0;

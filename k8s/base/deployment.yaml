@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: travelx-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: travelx-server
+  template:
+    metadata:
+      labels:
+        app: travelx-server
+    spec:
+      initContainers:
+        # DB가 아직 안 뜬 상태에서 앱이 부팅하면 EntityManagerFactory 생성에서
+        # 바로 크래시하므로(재시도 없음), TCP 포트가 열릴 때까지 대기한다.
+        - name: wait-for-db
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - until nc -z -w2 "$DB_HOST" "$DB_PORT"; do echo waiting for db; sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: travelx-server-config
+      containers:
+        - name: travelx-server
+          image: travelx-server:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: travelx-server-config
+            - secretRef:
+                name: travelx-server-secret
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 15
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: logs
+          emptyDir: {}
