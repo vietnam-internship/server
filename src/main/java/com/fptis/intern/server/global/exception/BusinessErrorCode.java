@@ -26,6 +26,13 @@ public enum BusinessErrorCode implements ErrorCode {
 
 
     /*
+     * 401 UNAUTHORIZED / 403 FORBIDDEN: 인증/인가 공통 (개인 네임스페이스 아님, Axxx)
+     */
+    UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "A001", "인증이 필요합니다."),
+    FORBIDDEN(HttpStatus.FORBIDDEN, "A002", "접근 권한이 없습니다."),
+    INVALID_GOOGLE_TOKEN(HttpStatus.UNAUTHORIZED, "A003", "유효하지 않은 구글 인증 정보입니다."),
+
+    /*
      * 405 METHOD_NOT_ALLOWED: 허용되지 않은 Request Method 호출
      */
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "C007", "허용되지 않은 메서드입니다."),
