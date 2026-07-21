@@ -1,0 +1,403 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1784445148994,
+  "projectRoot": "/Users/keephun/IdeaProjects/server",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Java/Kotlin",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "build.gradle"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "gradle",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "build": {
+      "path": "build",
+      "purpose": "Build output",
+      "fileCount": 1,
+      "lastAccessed": 1784445148976,
+      "keyFiles": [
+        "resolvedMainClassName"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 22,
+      "lastAccessed": 1784445148983,
+      "keyFiles": [
+        "TravelX_PRD_v1.3_EN-2.docx",
+        "design.md",
+        "discussion-en.md",
+        "discussion.md",
+        "discussion2-en.md"
+      ]
+    },
+    "gradle": {
+      "path": "gradle",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1784445148985,
+      "keyFiles": []
+    },
+    "k8s": {
+      "path": "k8s",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1784445148986,
+      "keyFiles": [
+        "README.md"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1784445148987,
+      "keyFiles": []
+    },
+    "src/test": {
+      "path": "src/test",
+      "purpose": "Test files",
+      "fileCount": 0,
+      "lastAccessed": 1784445148992,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "docs/discussion.md",
+      "accessCount": 29,
+      "lastAccessed": 1784184813738,
+      "type": "file"
+    },
+    {
+      "path": "docs/plan-google-oauth.md",
+      "accessCount": 25,
+      "lastAccessed": 1784281732519,
+      "type": "file"
+    },
+    {
+      "path": "docs/erd.md",
+      "accessCount": 8,
+      "lastAccessed": 1784110402097,
+      "type": "file"
+    },
+    {
+      "path": "src/main/resources/application.yml",
+      "accessCount": 8,
+      "lastAccessed": 1784282582348,
+      "type": "file"
+    },
+    {
+      "path": "docs/plan-b-locking.html",
+      "accessCount": 7,
+      "lastAccessed": 1784098663662,
+      "type": "file"
+    },
+    {
+      "path": "k8s/README.md",
+      "accessCount": 6,
+      "lastAccessed": 1784001365519,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/com/fptis/intern/server/global/exception/BusinessErrorCode.java",
+      "accessCount": 6,
+      "lastAccessed": 1784261069642,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/com/fptis/intern/server/global/exception/ApiResponse.java",
+      "accessCount": 5,
+      "lastAccessed": 1784282324352,
+      "type": "file"
+    },
+    {
+      "path": "docs/discussion2.md",
+      "accessCount": 4,
+      "lastAccessed": 1784110416045,
+      "type": "file"
+    },
+    {
+      "path": "Dockerfile",
+      "accessCount": 3,
+      "lastAccessed": 1784023644797,
+      "type": "file"
+    },
+    {
+      "path": "docs/branch-time-slot-locking.html",
+      "accessCount": 3,
+      "lastAccessed": 1784096658032,
+      "type": "file"
+    },
+    {
+      "path": "docs/branch-time-slot-locking.png",
+      "accessCount": 3,
+      "lastAccessed": 1784096674883,
+      "type": "file"
+    },
+    {
+      "path": "docs/plan-b-locking.png",
+      "accessCount": 3,
+      "lastAccessed": 1784098683672,
+      "type": "file"
+    },
+    {
+      "path": "docs/discussion3.md",
+      "accessCount": 3,
+      "lastAccessed": 1784187044893,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/com/fptis/intern/server/global/config/QuerydslConfig.java",
+      "accessCount": 3,
+      "lastAccessed": 1784258869440,
+      "type": "file"
+    },
+    {
+      "path": "src/main/resources/application-local.yml",
+      "accessCount": 3,
+      "lastAccessed": 1784282600854,
+      "type": "file"
+    },
+    {
+      "path": "src/main/resources/application-staging.yml",
+      "accessCount": 3,
+      "lastAccessed": 1784282607124,
+      "type": "file"
+    },
+    {
+      "path": "src/main/resources/application-prod.yml",
+      "accessCount": 3,
+      "lastAccessed": 1784282611659,
+      "type": "file"
+    },
+    {
+      "path": "k8s/overlays/local/configmap.env",
+      "accessCount": 3,
+      "lastAccessed": 1784282643925,
+      "type": "file"
+    },
+    {
+      "path": "src/main/resources/logback/logback-local.xml",
+      "accessCount": 2,
+      "lastAccessed": 1783996961007,
+      "type": "file"
+    },
+    {
+      "path": "src/main/resources/logback/logback-staging.xml",
+      "accessCount": 2,
+      "lastAccessed": 1783996969258,
+      "type": "file"
+    },
+    {
+      "path": "src/main/resources/logback/logback-prod.xml",
+      "accessCount": 2,
+      "lastAccessed": 1783996979340,
+      "type": "file"
+    },
+    {
+      "path": "k8s/base/deployment.yaml",
+      "accessCount": 2,
+      "lastAccessed": 1784023643738,
+      "type": "file"
+    },
+    {
+      "path": "k8s/base/service.yaml",
+      "accessCount": 2,
+      "lastAccessed": 1784023644072,
+      "type": "file"
+    },
+    {
+      "path": "k8s/overlays/prod/kustomization.yaml",
+      "accessCount": 2,
+      "lastAccessed": 1784023644453,
+      "type": "file"
+    },
+    {
+      "path": "docs/discussion2-en.md",
+      "accessCount": 2,
+      "lastAccessed": 1784089603605,
+      "type": "file"
+    },
+    {
+      "path": "docs/discussion-en.md",
+      "accessCount": 2,
+      "lastAccessed": 1784108494269,
+      "type": "file"
+    },
+    {
+      "path": "docs/plan-1-combined.png",
+      "accessCount": 2,
+      "lastAccessed": 1784187053600,
+      "type": "file"
+    },
+    {
+      "path": "docs/plan-2-separated.png",
+      "accessCount": 2,
+      "lastAccessed": 1784187053985,
+      "type": "file"
+    },
+    {
+      "path": "docs/plan-1-combined.html",
+      "accessCount": 2,
+      "lastAccessed": 1784187381543,
+      "type": "file"
+    },
+    {
+      "path": "docs/plan-2-separated.html",
+      "accessCount": 2,
+      "lastAccessed": 1784187405921,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/com/fptis/intern/server/global/exception/ErrorCode.java",
+      "accessCount": 2,
+      "lastAccessed": 1784258797673,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/com/fptis/intern/server/global/base/BaseTimeEntity.java",
+      "accessCount": 2,
+      "lastAccessed": 1784258797780,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/com/fptis/intern/server/global/exception/ResultType.java",
+      "accessCount": 2,
+      "lastAccessed": 1784258797837,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/com/fptis/intern/server/global/exception/BusinessException.java",
+      "accessCount": 2,
+      "lastAccessed": 1784258797891,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/com/fptis/intern/server/global/config/WebCorsProperties.java",
+      "accessCount": 2,
+      "lastAccessed": 1784282325093,
+      "type": "file"
+    },
+    {
+      "path": "docs/openapi.yaml",
+      "accessCount": 1,
+      "lastAccessed": 1783937204700,
+      "type": "file"
+    },
+    {
+      "path": "docs/index.html",
+      "accessCount": 1,
+      "lastAccessed": 1783937218146,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/com/fptis/intern/server/global/config/JpaAuditingConfig.java",
+      "accessCount": 1,
+      "lastAccessed": 1783996849140,
+      "type": "file"
+    },
+    {
+      "path": "src/main/java/com/fptis/intern/server/global/config/ThreadPoolConfig.java",
+      "accessCount": 1,
+      "lastAccessed": 1783996850503,
+      "type": "file"
+    },
+    {
+      "path": "k8s/base/kustomization.yaml",
+      "accessCount": 1,
+      "lastAccessed": 1783998104466,
+      "type": "file"
+    },
+    {
+      "path": "k8s/overlays/local/mysql.yaml",
+      "accessCount": 1,
+      "lastAccessed": 1783998110404,
+      "type": "file"
+    },
+    {
+      "path": "k8s/overlays/local/secret.env.example",
+      "accessCount": 1,
+      "lastAccessed": 1783998112955,
+      "type": "file"
+    },
+    {
+      "path": "k8s/overlays/local/kustomization.yaml",
+      "accessCount": 1,
+      "lastAccessed": 1783998114646,
+      "type": "file"
+    },
+    {
+      "path": "k8s/overlays/prod/configmap.env",
+      "accessCount": 1,
+      "lastAccessed": 1783998118874,
+      "type": "file"
+    },
+    {
+      "path": "discussion-ai-workflow-ko.md",
+      "accessCount": 1,
+      "lastAccessed": 1784003297701,
+      "type": "file"
+    },
+    {
+      "path": "discussion-ai-workflow-en.md",
+      "accessCount": 1,
+      "lastAccessed": 1784003305159,
+      "type": "file"
+    },
+    {
+      "path": "docs/plan-a-locking.html",
+      "accessCount": 1,
+      "lastAccessed": 1784097163053,
+      "type": "file"
+    },
+    {
+      "path": "docs/plan-a-locking.png",
+      "accessCount": 1,
+      "lastAccessed": 1784097206299,
+      "type": "file"
+    },
+    {
+      "path": "docs/design.md",
+      "accessCount": 1,
+      "lastAccessed": 1784170594954,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

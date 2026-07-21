@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Plan 1 — Combined (application + payment in one request)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 40px; background: #fff; font-family: Arial, Helvetica, sans-serif; color: #000; width: 1160px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { font-size: 14px; color: #555; margin-bottom: 16px; }
+  .apibadge { display: inline-block; border: 3px solid #000; font-weight: bold; font-size: 15px; padding: 6px 14px; margin-bottom: 24px; }
+  .stage { display: flex; align-items: stretch; }
+  .side { flex: 0 0 168px; display: flex; flex-direction: column; justify-content: center; font-weight: bold; font-size: 16px; }
+  .side .no { display: inline-block; border: 2px solid #000; border-radius: 50%; width: 26px; height: 26px; text-align: center; line-height: 24px; font-size: 15px; margin-right: 8px; }
+  .side small { font-weight: normal; font-size: 12.5px; color: #555; margin-top: 5px; line-height: 1.4; }
+  .pipe { display: flex; align-items: stretch; flex: 1; }
+  .step { border: 3px solid #000; padding: 12px 12px; font-size: 15px; font-weight: bold; display: flex; flex-direction: column; justify-content: center; text-align: center; flex: 1; }
+  .step small { font-weight: normal; font-size: 12px; margin-top: 6px; line-height: 1.45; color: #333; }
+  .arr { width: 30px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; flex-shrink: 0; }
+  .hot { border-color: #c1121f; color: #c1121f; }
+  .hot small { color: #c1121f; }
+  .lockbar { margin-left: 168px; margin-top: 14px; }
+  .lockbar .bar { border-bottom: 4px solid #c1121f; border-left: 4px solid #c1121f; border-right: 4px solid #c1121f; height: 12px; }
+  .lockbar .cap { text-align: center; color: #c1121f; font-weight: bold; font-size: 15px; margin-top: 8px; }
+  .queue { margin-top: 28px; border: 3px solid #000; padding: 14px 18px; font-size: 15px; line-height: 1.6; }
+  .queue b.red { color: #c1121f; }
+</style>
+</head>
+<body>
+  <h1>Plan 1 — Combined: application + payment in ONE request/transaction</h1>
+  <div class="sub">The server holds the slot, calls the PG, and commits or rolls back — all inside a single API call</div>
+  <div class="apibadge">Client API calls: 1 &nbsp;—&nbsp; a single request does everything</div>
+
+  <div class="stage">
+    <div class="side"><div><span class="no">1</span>API 1 / 1</div><small>POST /reservations<br/>(payment inline)</small></div>
+    <div class="pipe">
+      <div class="step">BEGIN TX<br/>lock slot row<small>SELECT … FOR UPDATE<br/>(BRANCH_TIME_SLOT, 1 row)</small></div>
+      <div class="arr">▶</div>
+      <div class="step">decrement stock<small>remaining--<br/>stock_remaining -= amount</small></div>
+      <div class="arr">▶</div>
+      <div class="step hot">call PG approval<small>external system — 1–30 s<br/>timeout = unknown state</small></div>
+      <div class="arr">▶</div>
+      <div class="step">COMMIT<br/>or ROLLBACK<small>the TX can end only<br/>after the PG responds</small></div>
+    </div>
+  </div>
+
+  <div class="lockbar">
+    <div class="bar"></div>
+    <div class="cap">&#128274; lock held for this whole span — its length depends on PG latency (seconds, not milliseconds)</div>
+  </div>
+
+  <div class="queue">
+    Every other request R2, R3, … for the same slot waits in the lock queue for this <b class="red">entire span</b>.
+    The moment the PG slows down, <b>bookings for this slot stall entirely</b>; worst case = waiters × 30 s timeout.<br/>
+    The failure mode is worse too — payment succeeded + response lost = <b class="red">"money out, no reservation"</b> → recovery is a refund + CS ticket.
+  </div>
+</body>
+</html>

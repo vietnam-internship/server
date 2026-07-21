@@ -1,0 +1,133 @@
+{
+  "updatedAt": "2026-07-15T10:23:10.603Z",
+  "missions": [
+    {
+      "id": "session:ae964ea7-b56c-435c-be95-d22b56e38cde:none",
+      "source": "session",
+      "name": "none",
+      "objective": "Session mission",
+      "createdAt": "2026-07-15T10:13:11.709Z",
+      "updatedAt": "2026-07-15T10:23:10.603Z",
+      "status": "done",
+      "workerCount": 1,
+      "taskCounts": {
+        "total": 1,
+        "pending": 0,
+        "blocked": 0,
+        "inProgress": 0,
+        "completed": 1,
+        "failed": 0
+      },
+      "agents": [
+        {
+          "name": "architect:adb4679",
+          "role": "architect",
+          "ownership": "adb467979cf6847d6",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-07-15T10:23:10.603Z"
+        }
+      ],
+      "timeline": [
+        {
+          "id": "session-stop:adb467979cf6847d6:2026-07-15T10:21:32.017Z",
+          "at": "2026-07-15T10:21:32.017Z",
+          "kind": "completion",
+          "agent": "architect:adb4679",
+          "detail": "completed",
+          "sourceKey": "session-stop:adb467979cf6847d6"
+        },
+        {
+          "id": "session-stop:adb467979cf6847d6:2026-07-15T10:21:36.949Z",
+          "at": "2026-07-15T10:21:36.949Z",
+          "kind": "completion",
+          "agent": "architect:adb4679",
+          "detail": "completed",
+          "sourceKey": "session-stop:adb467979cf6847d6"
+        },
+        {
+          "id": "session-start:adb467979cf6847d6:2026-07-15T10:21:55.036Z",
+          "at": "2026-07-15T10:21:55.036Z",
+          "kind": "update",
+          "agent": "architect:adb4679",
+          "detail": "started architect:adb4679",
+          "sourceKey": "session-start:adb467979cf6847d6"
+        },
+        {
+          "id": "session-stop:adb467979cf6847d6:2026-07-15T10:22:43.294Z",
+          "at": "2026-07-15T10:22:43.294Z",
+          "kind": "completion",
+          "agent": "architect:adb4679",
+          "detail": "completed",
+          "sourceKey": "session-stop:adb467979cf6847d6"
+        },
+        {
+          "id": "session-stop:adb467979cf6847d6:2026-07-15T10:22:46.673Z",
+          "at": "2026-07-15T10:22:46.673Z",
+          "kind": "completion",
+          "agent": "architect:adb4679",
+          "detail": "completed",
+          "sourceKey": "session-stop:adb467979cf6847d6"
+        },
+        {
+          "id": "session-stop:adb467979cf6847d6:2026-07-15T10:22:50.809Z",
+          "at": "2026-07-15T10:22:50.809Z",
+          "kind": "completion",
+          "agent": "architect:adb4679",
+          "detail": "completed",
+          "sourceKey": "session-stop:adb467979cf6847d6"
+        },
+        {
+          "id": "session-stop:adb467979cf6847d6:2026-07-15T10:22:53.803Z",
+          "at": "2026-07-15T10:22:53.803Z",
+          "kind": "completion",
+          "agent": "architect:adb4679",
+          "detail": "completed",
+          "sourceKey": "session-stop:adb467979cf6847d6"
+        },
+        {
+          "id": "session-stop:adb467979cf6847d6:2026-07-15T10:22:55.890Z",
+          "at": "2026-07-15T10:22:55.890Z",
+          "kind": "completion",
+          "agent": "architect:adb4679",
+          "detail": "completed",
+          "sourceKey": "session-stop:adb467979cf6847d6"
+        },
+        {
+          "id": "session-stop:adb467979cf6847d6:2026-07-15T10:22:58.428Z",
+          "at": "2026-07-15T10:22:58.428Z",
+          "kind": "completion",
+          "agent": "architect:adb4679",
+          "detail": "completed",
+          "sourceKey": "session-stop:adb467979cf6847d6"
+        },
+        {
+          "id": "session-stop:adb467979cf6847d6:2026-07-15T10:23:03.468Z",
+          "at": "2026-07-15T10:23:03.468Z",
+          "kind": "completion",
+          "agent": "architect:adb4679",
+          "detail": "completed",
+          "sourceKey": "session-stop:adb467979cf6847d6"
+        },
+        {
+          "id": "session-stop:adb467979cf6847d6:2026-07-15T10:23:05.129Z",
+          "at": "2026-07-15T10:23:05.129Z",
+          "kind": "completion",
+          "agent": "architect:adb4679",
+          "detail": "completed",
+          "sourceKey": "session-stop:adb467979cf6847d6"
+        },
+        {
+          "id": "session-stop:adb467979cf6847d6:2026-07-15T10:23:10.603Z",
+          "at": "2026-07-15T10:23:10.603Z",
+          "kind": "completion",
+          "agent": "architect:adb4679",
+          "detail": "completed",
+          "sourceKey": "session-stop:adb467979cf6847d6"
+        }
+      ]
+    }
+  ]
+}
