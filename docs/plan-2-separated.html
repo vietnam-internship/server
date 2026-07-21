@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Plan 2 — Separated (hold → pay within TTL → promote)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 40px; background: #fff; font-family: Arial, Helvetica, sans-serif; color: #000; width: 1160px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { font-size: 14px; color: #555; margin-bottom: 16px; }
+  .apibadge { display: inline-block; border: 3px solid #000; font-weight: bold; font-size: 15px; padding: 6px 14px; margin-bottom: 24px; }
+  .stage { display: flex; align-items: stretch; }
+  .side { flex: 0 0 168px; display: flex; flex-direction: column; justify-content: center; font-weight: bold; font-size: 16px; }
+  .side .no { display: inline-block; border: 2px solid #000; border-radius: 50%; width: 26px; height: 26px; text-align: center; line-height: 24px; font-size: 15px; margin-right: 8px; }
+  .side small { font-weight: normal; font-size: 12px; color: #555; margin-top: 5px; line-height: 1.4; }
+  .pipe { display: flex; align-items: stretch; flex: 1; }
+  .box { border: 3px solid #000; padding: 10px 12px; font-size: 14.5px; font-weight: bold; display: flex; flex-direction: column; justify-content: center; text-align: center; flex: 1; }
+  .box small { font-weight: normal; font-size: 12px; margin-top: 5px; line-height: 1.4; color: #333; }
+  .arr { width: 28px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: bold; flex-shrink: 0; }
+  .hot { border-color: #c1121f; color: #c1121f; }
+  .hot small { color: #c1121f; }
+  .down { margin: 10px 0 10px 168px; font-size: 14px; font-weight: bold; }
+  .down .v { font-size: 18px; }
+  .ok-tag { display: inline-block; margin-top: 10px; margin-left: 168px; color: #000; font-weight: bold; font-size: 14px; border: 2px solid #000; padding: 3px 10px; }
+  .lane { margin-top: 26px; border: 3px dashed #c1121f; padding: 14px 16px; }
+  .lane h2 { font-size: 16px; color: #c1121f; margin: 0 0 10px; }
+  .lane .pipe .box { border-width: 2px; }
+  .rule { margin-top: 8px; font-size: 13.5px; color: #c1121f; font-weight: bold; }
+  .outbox { margin-top: 18px; border: 3px solid #000; padding: 14px 16px; }
+  .outbox h2 { font-size: 16px; margin: 0 0 10px; }
+  .outbox .pipe .box { border-width: 2px; }
+  .outbox .note { margin-top: 8px; font-size: 13.5px; color: #333; }
+</style>
+</head>
+<body>
+  <h1>Plan 2 — Separated: hold → pay within TTL → promote (saga)</h1>
+  <div class="sub">The seat is secured before money moves; money state is checked before the seat is released</div>
+  <div class="apibadge">Client API calls: 3 &nbsp;—&nbsp; &#9312; POST /reservations (hold) &nbsp;&#9313; PG checkout (external) &nbsp;&#9314; POST /payments/confirm (promote)</div>
+
+  <div class="stage">
+    <div class="side"><div><span class="no">1</span>API 1 — hold</div><small>POST /reservations<br/>local TX, milliseconds<br/>the lock lives only here</small></div>
+    <div class="pipe">
+      <div class="box">lock slot row<small>FOR UPDATE → remaining--<br/>decrement stock</small></div>
+      <div class="arr">▶</div>
+      <div class="box">INSERT reservation<small>status = PENDING_PAYMENT<br/>payment TTL (5 min) starts</small></div>
+      <div class="arr">▶</div>
+      <div class="box">write outbox<small>RESERVATION_EVENT<br/>INSERTed in the same TX</small></div>
+      <div class="arr">▶</div>
+      <div class="box">COMMIT<small>&#128274; lock released instantly<br/>independent of the PG</small></div>
+    </div>
+  </div>
+
+  <div class="down"><span class="v">▼</span> the seat is already yours — payment failures &amp; retries below cannot affect the hold</div>
+
+  <div class="stage">
+    <div class="side"><div><span class="no">2</span>API 2 — pay</div><small>PG checkout (external)<br/>no server lock, no DB TX</small></div>
+    <div class="pipe">
+      <div class="box">client ↔ PG checkout window<small>redirect / app auth — our server is not involved</small></div>
+      <div class="arr">▶</div>
+      <div class="box">card declined · insufficient balance?<small>keep the seat, retry with another card within the TTL</small></div>
+    </div>
+  </div>
+
+  <div class="down"><span class="v">▼</span> success callback (successUrl)</div>
+
+  <div class="stage">
+    <div class="side"><div><span class="no">3</span>API 3 — promote</div><small>POST /payments/confirm<br/>the only point where<br/>money moves</small></div>
+    <div class="pipe">
+      <div class="box hot">validate the hold<small>Rule &#9313;: check the seat BEFORE approval<br/>= money moves only after the seat is confirmed</small></div>
+      <div class="arr">▶</div>
+      <div class="box">PG final approval API<small>actual payment happens here<br/>idempotency key = reservation number</small></div>
+      <div class="arr">▶</div>
+      <div class="box">CAS transition<small>UPDATE … SET status='RESERVED'<br/>WHERE status='PENDING_PAYMENT'</small></div>
+      <div class="arr">▶</div>
+      <div class="box">write outbox<small>confirmation event — same TX</small></div>
+    </div>
+  </div>
+  <div class="ok-tag">RESERVED confirmed → 2-hour pickup TTL starts</div>
+
+  <div class="lane">
+    <h2>&#9200; Payment-TTL Worker</h2>
+    <div class="pipe">
+      <div class="box">find PENDING_PAYMENT<br/>past its TTL</div>
+      <div class="arr">▶</div>
+      <div class="box hot">re-query the PG<small>Rule &#9312;: release only AFTER the re-query<br/>— releasing blindly resurrects "money out, no seat"</small></div>
+      <div class="arr">▶</div>
+      <div class="box">unpaid → release<small>CAS: WHERE status='PENDING_PAYMENT'<br/>restore slot &amp; stock</small></div>
+      <div class="arr">▶</div>
+      <div class="box">paid → promote<small>do NOT release —<br/>confirm as RESERVED</small></div>
+    </div>
+    <div class="rule">Invariants: the hold comes before the money; the release comes after the re-query</div>
+  </div>
+
+  <div class="outbox">
+    <h2>&#128228; Outbox relay — polls every few seconds (closes the dual-write gap between committed state and notifications)</h2>
+    <div class="pipe">
+      <div class="box">RESERVATION_EVENT<small>poll unpublished events</small></div>
+      <div class="arr">▶</div>
+      <div class="box">send notifications / follow-ups<small>confirmed / released / refunded</small></div>
+      <div class="arr">▶</div>
+      <div class="box">mark as published<small>retry next cycle on failure<br/>(at-least-once)</small></div>
+    </div>
+    <div class="note">Events are written in the same transaction as the state change — "state committed but notification lost" and "rolled back but notification sent" are both structurally impossible.</div>
+  </div>
+</body>
+</html>
