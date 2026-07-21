@@ -71,7 +71,15 @@ tags:
   - name: Admin
     description: 관리자 — 예약/환율/지점/대시보드 관리
   - name: AI Internal
-    description: AI 모듈 전용 내부(Internal) API (외부 접근 불가)
+    description: |
+      AI 모듈 전용 내부(Internal) API (외부 접근 불가)
+      
+      ### AI Internal API Enum 사전
+      | API / DTO 스키마 | 필드명 | 허용되는 Enum 값 |
+      |---|---|---|
+      | **AiRecommendation** | `recommendation` | `INCREASING`, `NEUTRAL`, `DECREASING` |
+      | **AiSignal** | `signalType` | `MA`, `RSI`, `MACD` |
+      | **Backtest** | `strategyType` | `LINEAR_REGRESSION`, `BASE_LINE`, `LOGISTIC_REGRESSION` |
 
 paths:
   # ──────────────────────────── Auth ────────────────────────────
@@ -2023,8 +2031,8 @@ components:
           example: [101, 102]
         recommendation:
           type: string
-          enum: [BUY, SELL, HOLD, NEUTRAL]
-          example: BUY
+          enum: [INCREASING, NEUTRAL, DECREASING]
+          example: INCREASING
         rationale:
           type: string
           example: "이동평균 20일선 돌파 및 단기 골든크로스 발생"
@@ -2066,7 +2074,7 @@ components:
           example: 1
         strategyType:
           type: string
-          enum: [LINEAR_REGRESSION, MOVING_AVERAGE, LOGISTIC_REGRESSION]
+          enum: [LINEAR_REGRESSION, BASE_LINE, LOGISTIC_REGRESSION]
           example: LINEAR_REGRESSION
         periodStart:
           type: string
