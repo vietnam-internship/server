@@ -10,6 +10,7 @@ import com.fptis.intern.server.domain.user.UserRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -45,7 +46,7 @@ class ReservationRepositoryTest {
     private BranchRepository branchRepository;
 
     @Test
-    void savesReservationAndFindsBySlotAndOwner() {
+    void savesReservationAndFindsByOwner() {
         User user = userRepository.save(User.builder()
                 .name("tester")
                 .email("tester@example.com")
@@ -75,12 +76,15 @@ class ReservationRepositoryTest {
         reservation.issueQrToken("raw-qr-token");
         reservationRepository.save(reservation);
 
-        assertThat(reservationRepository.countByBranchIdAndPickupDateAndPickupTimeAndStatusAndExpiresAtAfter(
-                branch.getId(), LocalDate.now().plusDays(1), LocalTime.of(10, 30), ReservationStatus.RESERVED, now))
-                .isEqualTo(1);
-
-        assertThat(reservationRepository.findByUserId(user.getId(), PageRequest.of(0, 20)).getContent())
+        assertThat(reservationRepository.findMyReservations(user.getId(), PageRequest.of(0, 20)).getContent())
                 .extracting(Reservation::getReservationNumber)
                 .containsExactly("TX-20260721-0001");
+
+        assertThat(reservationRepository.findMyReservationsByStatus(
+                user.getId(), List.of(ReservationStatus.RESERVED), PageRequest.of(0, 20)).getContent())
+                .hasSize(1);
+
+        assertThat(reservationRepository.findExpiredReservations(ReservationStatus.RESERVED, now.minusHours(3)))
+                .isEmpty();
     }
 }

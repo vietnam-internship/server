@@ -7,6 +7,7 @@ import com.fptis.intern.server.domain.branch.Branch;
 import com.fptis.intern.server.domain.branch.BranchCurrencyRate;
 import com.fptis.intern.server.domain.branch.BranchCurrencyRateRepository;
 import com.fptis.intern.server.domain.branch.BranchRepository;
+import com.fptis.intern.server.domain.branch.BranchTimeSlotRepository;
 import com.fptis.intern.server.domain.reservation.Reservation;
 import com.fptis.intern.server.domain.reservation.ReservationRepository;
 import com.fptis.intern.server.domain.reservation.ReservationStatus;
@@ -54,6 +55,8 @@ class ReservationServiceTest {
     private BranchRepository branchRepository;
     @Autowired
     private BranchCurrencyRateRepository branchCurrencyRateRepository;
+    @Autowired
+    private BranchTimeSlotRepository branchTimeSlotRepository;
 
     private ReservationService reservationService;
     private User verifiedUser;
@@ -61,8 +64,8 @@ class ReservationServiceTest {
 
     @BeforeEach
     void setUp() {
-        reservationService = new ReservationService(
-                reservationRepository, userRepository, branchRepository, branchCurrencyRateRepository);
+        reservationService = new ReservationService(reservationRepository, userRepository, branchRepository,
+                branchCurrencyRateRepository, branchTimeSlotRepository);
 
         verifiedUser = userRepository.save(User.builder()
                 .name("tester")
@@ -116,7 +119,7 @@ class ReservationServiceTest {
         assertThat(response.reservationNumber()).startsWith("TX-");
 
         BranchCurrencyRate rate = branchCurrencyRateRepository
-                .findByBranchIdAndCurrencyCode(branch.getId(), "USD").orElseThrow();
+                .findRate(branch.getId(), "USD").orElseThrow();
         assertThat(rate.getReservationOnlyStock()).isEqualTo(500);
     }
 
@@ -170,7 +173,7 @@ class ReservationServiceTest {
         reservationService.cancelReservation(verifiedUser.getId(), created.id());
 
         BranchCurrencyRate rate = branchCurrencyRateRepository
-                .findByBranchIdAndCurrencyCode(branch.getId(), "USD").orElseThrow();
+                .findRate(branch.getId(), "USD").orElseThrow();
         assertThat(rate.getReservationOnlyStock()).isEqualTo(1000);
 
         Reservation reservation = reservationRepository.findById(created.id()).orElseThrow();
@@ -217,7 +220,7 @@ class ReservationServiceTest {
         assertThat(expired.isAutoExpired()).isTrue();
 
         BranchCurrencyRate rate = branchCurrencyRateRepository
-                .findByBranchIdAndCurrencyCode(branch.getId(), "USD").orElseThrow();
+                .findRate(branch.getId(), "USD").orElseThrow();
         assertThat(rate.getReservationOnlyStock()).isEqualTo(1000);
     }
 }

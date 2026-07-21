@@ -11,11 +11,14 @@ import org.springframework.data.repository.query.Param;
 
 public interface BranchCurrencyRateRepository extends JpaRepository<BranchCurrencyRate, Long> {
 
-    Optional<BranchCurrencyRate> findByBranchIdAndCurrencyCode(Long branchId, String currencyCode);
+    @Query("select r from BranchCurrencyRate r where r.branchId = :branchId and r.currencyCode = :currencyCode")
+    Optional<BranchCurrencyRate> findRate(@Param("branchId") Long branchId, @Param("currencyCode") String currencyCode);
 
-    List<BranchCurrencyRate> findByBranchId(Long branchId);
+    @Query("select r from BranchCurrencyRate r where r.branchId = :branchId")
+    List<BranchCurrencyRate> findRatesByBranch(@Param("branchId") Long branchId);
 
-    List<BranchCurrencyRate> findByBranchIdIn(Collection<Long> branchIds);
+    @Query("select r from BranchCurrencyRate r where r.branchId in :branchIds")
+    List<BranchCurrencyRate> findRatesByBranches(@Param("branchIds") Collection<Long> branchIds);
 
     /**
      * 예약 생성/취소/만료 시 재고를 증감하기 전 반드시 이 메서드로 조회해 행 락을 잡는다 —

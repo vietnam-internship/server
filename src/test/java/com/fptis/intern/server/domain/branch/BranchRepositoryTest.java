@@ -58,7 +58,7 @@ class BranchRepositoryTest {
         inactive.update(null, null, null, null, null, null, null, null, null, false);
         branchRepository.save(inactive);
 
-        assertThat(branchRepository.findByActiveTrue())
+        assertThat(branchRepository.findActiveBranches())
                 .extracting(Branch::getId)
                 .containsExactly(active.getId());
 
@@ -85,13 +85,13 @@ class BranchRepositoryTest {
                 .reservationOnlyStock(2000)
                 .build());
 
-        assertThat(branchCurrencyRateRepository.findByBranchIdAndCurrencyCode(branch.getId(), "USD"))
+        assertThat(branchCurrencyRateRepository.findRate(branch.getId(), "USD"))
                 .isPresent()
                 .get()
                 .extracting(BranchCurrencyRate::getId)
                 .isEqualTo(rate.getId());
 
-        assertThat(branchCurrencyRateRepository.findByBranchIdIn(List.of(branch.getId())))
+        assertThat(branchCurrencyRateRepository.findRatesByBranches(List.of(branch.getId())))
                 .hasSize(1);
     }
 }

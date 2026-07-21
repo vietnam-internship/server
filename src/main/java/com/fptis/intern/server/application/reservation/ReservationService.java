@@ -4,6 +4,8 @@ import com.fptis.intern.server.domain.branch.Branch;
 import com.fptis.intern.server.domain.branch.BranchCurrencyRate;
 import com.fptis.intern.server.domain.branch.BranchCurrencyRateRepository;
 import com.fptis.intern.server.domain.branch.BranchRepository;
+import com.fptis.intern.server.domain.branch.BranchTimeSlot;
+import com.fptis.intern.server.domain.branch.BranchTimeSlotRepository;
 import com.fptis.intern.server.domain.reservation.Reservation;
 import com.fptis.intern.server.domain.reservation.ReservationRepository;
 import com.fptis.intern.server.domain.reservation.ReservationStatus;
@@ -21,6 +23,7 @@ import com.fptis.intern.server.presentation.reservation.dto.ReservationSummaryRe
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -29,6 +32,7 @@ import java.util.Base64;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +49,7 @@ public class ReservationService {
     private final UserRepository userRepository;
     private final BranchRepository branchRepository;
     private final BranchCurrencyRateRepository branchCurrencyRateRepository;
+    private final BranchTimeSlotRepository branchTimeSlotRepository;
 
     @Transactional
     public ReservationDetailResponse createReservation(Long userId, ReservationCreateRequest request) {
@@ -68,11 +73,7 @@ public class ReservationService {
         rate.decreaseStock(request.amount());
 
         LocalTime pickupTime = LocalTime.parse(request.pickupTime());
-        long slotCount = reservationRepository.countByBranchIdAndPickupDateAndPickupTimeAndStatusAndExpiresAtAfter(
-                branch.getId(), request.pickupDate(), pickupTime, ReservationStatus.RESERVED, now);
-        if (slotCount >= branch.getTimeSlotCapacity()) {
-            throw new BusinessException(BusinessErrorCode.TIME_SLOT_FULL);
-        }
+        lockTimeSlot(branch, request.pickupDate(), pickupTime).decreaseRemaining();
 
         Reservation reservation = Reservation.builder()
                 .userId(userId)
@@ -95,8 +96,8 @@ public class ReservationService {
 
     public ReservationPageResponse listMyReservations(Long userId, String statusFilter, Pageable pageable) {
         Page<Reservation> reservations = statusFilter == null || statusFilter.isBlank()
-                ? reservationRepository.findByUserId(userId, pageable)
-                : reservationRepository.findByUserIdAndStatusIn(userId, parseStatuses(statusFilter), pageable);
+                ? reservationRepository.findMyReservations(userId, pageable)
+                : reservationRepository.findMyReservationsByStatus(userId, parseStatuses(statusFilter), pageable);
 
         return ReservationPageResponse.of(reservations.map(this::toSummary));
     }
@@ -107,7 +108,7 @@ public class ReservationService {
 
         Branch branch = getBranchOrThrow(reservation.getBranchId());
         BranchCurrencyRate rate = branchCurrencyRateRepository
-                .findByBranchIdAndCurrencyCode(branch.getId(), reservation.getCurrencyCode())
+                .findRate(branch.getId(), reservation.getCurrencyCode())
                 .orElse(null);
         return toDetail(reservation, branch, rate);
     }
@@ -119,6 +120,7 @@ public class ReservationService {
 
         reservation.cancel(false);
         restoreStock(reservation);
+        restoreTimeSlot(reservation);
 
         // 취소 알림 발송은 Notification 도메인이 없어 생략한다.
     }
@@ -135,6 +137,7 @@ public class ReservationService {
         if (reservation.isExpired(now)) {
             reservation.cancel(true);
             restoreStock(reservation);
+            restoreTimeSlot(reservation);
             throw new BusinessException(BusinessErrorCode.QR_EXPIRED);
         }
         if (reservation.getStatus() == ReservationStatus.COMPLETED) {
@@ -154,7 +157,7 @@ public class ReservationService {
 
         Branch branch = getBranchOrThrow(reservation.getBranchId());
         BranchCurrencyRate rate = branchCurrencyRateRepository
-                .findByBranchIdAndCurrencyCode(branch.getId(), reservation.getCurrencyCode())
+                .findRate(branch.getId(), reservation.getCurrencyCode())
                 .orElse(null);
         return RedeemResponse.of(reservation, toDetail(reservation, branch, rate));
     }
@@ -162,12 +165,23 @@ public class ReservationService {
     @Transactional
     public void expireOverdueReservations() {
         LocalDateTime now = LocalDateTime.now();
-        List<Reservation> overdue =
-                reservationRepository.findAllByStatusAndExpiresAtBefore(ReservationStatus.RESERVED, now);
+        List<Reservation> overdue = reservationRepository.findExpiredReservations(ReservationStatus.RESERVED, now);
         for (Reservation reservation : overdue) {
             reservation.cancel(true);
             restoreStock(reservation);
+            restoreTimeSlot(reservation);
         }
+    }
+
+    /**
+     * discussions#13에서 채택한 "방안 A(1 Row Locked)" — 슬롯 행을 없으면 만들고(ensureExists),
+     * 그 행에 비관적 락을 걸어 반환한다. 호출자는 반환된 행에서 곧바로 increase/decreaseRemaining을
+     * 호출해야 같은 트랜잭션 안에서 락이 유지된 채로 원자적으로 반영된다.
+     */
+    private BranchTimeSlot lockTimeSlot(Branch branch, LocalDate pickupDate, LocalTime pickupTime) {
+        branchTimeSlotRepository.ensureExists(branch.getId(), pickupDate, pickupTime, branch.getTimeSlotCapacity());
+        return branchTimeSlotRepository.lockForUpdate(branch.getId(), pickupDate, pickupTime)
+                .orElseThrow(() -> new IllegalStateException("ensureExists 직후이므로 슬롯 행은 항상 존재해야 한다."));
     }
 
     private void restoreStock(Reservation reservation) {
@@ -175,26 +189,31 @@ public class ReservationService {
                 .ifPresent(rate -> rate.increaseStock(reservation.getAmount()));
     }
 
+    private void restoreTimeSlot(Reservation reservation) {
+        branchTimeSlotRepository
+                .lockForUpdate(reservation.getBranchId(), reservation.getPickupDate(), reservation.getPickupTime())
+                .ifPresent(BranchTimeSlot::increaseRemaining);
+    }
+
     /**
      * PRD §19.2: 최근 30일 노쇼 1회 → 동시 RESERVED 1건 제한, 누적 3회 이상이면 가장 최근
      * 노쇼로부터 7일간 신규 예약을 차단한다.
      */
     private void assertNoShowLimitNotExceeded(Long userId, LocalDateTime now) {
-        long noShowCount = reservationRepository.countByUserIdAndStatusAndAutoExpiredTrueAndUpdatedAtAfter(
-                userId, ReservationStatus.CANCELLED, now.minusDays(30));
+        long noShowCount = reservationRepository.countNoShowsSince(userId, ReservationStatus.CANCELLED, now.minusDays(30));
 
         if (noShowCount >= 3) {
             LocalDateTime sevenDaysAgo = now.minusDays(7);
             boolean blockedByRecentNoShow = reservationRepository
-                    .findTopByUserIdAndStatusAndAutoExpiredTrueOrderByUpdatedAtDesc(userId, ReservationStatus.CANCELLED)
+                    .findNoShows(userId, ReservationStatus.CANCELLED, PageRequest.of(0, 1))
+                    .stream().findFirst()
                     .map(r -> r.getUpdatedAt().isAfter(sevenDaysAgo))
                     .orElse(false);
             if (blockedByRecentNoShow) {
                 throw new BusinessException(BusinessErrorCode.NO_SHOW_LIMIT);
             }
         } else if (noShowCount >= 1) {
-            long activeCount = reservationRepository.countByUserIdAndStatusAndExpiresAtAfter(
-                    userId, ReservationStatus.RESERVED, now);
+            long activeCount = reservationRepository.countActiveReservations(userId, ReservationStatus.RESERVED, now);
             if (activeCount >= 1) {
                 throw new BusinessException(BusinessErrorCode.NO_SHOW_LIMIT);
             }
