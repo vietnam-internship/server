@@ -78,7 +78,7 @@ tags:
       | API / DTO 스키마 | 필드명 | 허용되는 Enum 값 |
       |---|---|---|
       | **AiRecommendation** | `recommendation` | `INCREASING`, `NEUTRAL`, `DECREASING` |
-      | **AiSignal** | `signalType` | `MA`, `RSI`, `MACD` |
+      | **AiSignal** | `signalType` | `MA`, `RSI`, `MACD`, `STD` |
       | **Backtest** | `strategyType` | `LINEAR_REGRESSION`, `BASE_LINE`, `LOGISTIC_REGRESSION` |
 
 paths:
@@ -2054,7 +2054,7 @@ components:
       properties:
         signalType:
           type: string
-          enum: [MA, RSI, MACD]
+          enum: [MA, RSI, MACD, STD]
           example: MA
         windowDays:
           type: integer
