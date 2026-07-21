@@ -22,6 +22,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // Spring Boot 4.x split @DataJpaTest out into its own starter
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 
     // JPA
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -37,10 +39,12 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok'
 
     // swagger
-    implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9"
+    implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3"
 
     // mysql
-    implementation 'org.flywaydb:flyway-core'
+    // Spring Boot 4.x split FlywayAutoConfiguration out of the monolithic autoconfigure jar —
+    // flyway-core alone no longer triggers migrations, this starter is required.
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
     implementation 'org.flywaydb:flyway-mysql'
     runtimeOnly 'com.mysql:mysql-connector-j'
 
@@ -63,9 +67,13 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 
+
     //monitoring
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // Google OAuth ID token 검증
+    implementation 'com.google.api-client:google-api-client:2.7.0'
 }
 
 tasks.named('test') {
