@@ -118,7 +118,8 @@ datetime updated_at
         enum signal_type
         int window_days
         decimal value
-        datetime calculated_at
+        datetime created_at
+        datetime updated_at
     }
 
     AI_RECOMMENDATION {
@@ -128,23 +129,17 @@ datetime updated_at
         text rationale
         decimal confidence_score
         varchar model_version
-        datetime generated_at
         datetime expires_at
+        datetime created_at
+        datetime updated_at
     }
 
     AI_RECOMMENDATION_SIGNAL {
         bigint id PK
         bigint recommendation_id FK
         bigint signal_id FK
-    }
-
-    TOOL_CALL_LOG {
-        bigint id PK
-        bigint recommendation_id FK
-        varchar tool_name
-        json tool_input
-        json tool_output
-        datetime called_at
+        datetime created_at
+        datetime updated_at
     }
 
     EXCHANGE_RATE_HISTORY {
@@ -164,17 +159,7 @@ datetime updated_at
         int correct_signals
         decimal accuracy_rate
         datetime created_at
-    }
-
-    NEWS_ARTICLE {
-        bigint id PK
-        varchar currency_code
-        varchar title
-        varchar source
-        varchar url
-        datetime published_at
-        decimal sentiment_score
-        datetime collected_at
+        datetime updated_at
     }
 
     MACRO_INDICATOR {
@@ -183,6 +168,8 @@ datetime updated_at
         varchar indicator_type
         decimal value
         date recorded_at
+        datetime created_at
+        datetime updated_at
     }
 
     BRANCH ||--o{ BRANCH_OPERATING_HOURS : "has"
@@ -199,6 +186,5 @@ datetime updated_at
     CURRENCY ||--o{ AI_RECOMMENDATION : "has"
     AI_RECOMMENDATION ||--o{ AI_RECOMMENDATION_SIGNAL : "has"
     RECOMMENDATION_SIGNAL ||--o{ AI_RECOMMENDATION_SIGNAL : "has"
-    AI_RECOMMENDATION ||--o{ TOOL_CALL_LOG : "has"
     CURRENCY ||--o{ EXCHANGE_RATE_HISTORY : "has"
     CURRENCY ||--o{ BACKTEST_RESULT : "has"
