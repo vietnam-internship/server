@@ -1,6 +1,8 @@
 package com.fptis.intern.server.domain.branch;
 
 import com.fptis.intern.server.global.base.BaseTimeEntity;
+import com.fptis.intern.server.global.exception.BusinessErrorCode;
+import com.fptis.intern.server.global.exception.BusinessException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -57,5 +59,19 @@ public class BranchCurrencyRate extends BaseTimeEntity {
 
     public boolean hasStock() {
         return reservationOnlyStock > 0;
+    }
+
+    /**
+     * 예약 생성 시 호출한다 — 반드시 비관적 락으로 조회한 행에서 호출해 동시 예약 초과 판매를 막는다.
+     */
+    public void decreaseStock(double amount) {
+        if (reservationOnlyStock < amount) {
+            throw new BusinessException(BusinessErrorCode.STOCK_EXCEEDED);
+        }
+        this.reservationOnlyStock -= amount;
+    }
+
+    public void increaseStock(double amount) {
+        this.reservationOnlyStock += amount;
     }
 }

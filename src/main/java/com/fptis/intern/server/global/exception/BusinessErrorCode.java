@@ -43,6 +43,20 @@ public enum BusinessErrorCode implements ErrorCode {
     BRANCH_NOT_FOUND(HttpStatus.NOT_FOUND, "C201", "존재하지 않는 지점입니다."),
 
     /*
+     * 이견희 : C2xx (Reservation)
+     */
+    RESERVATION_NOT_FOUND(HttpStatus.NOT_FOUND, "C202", "존재하지 않는 예약입니다."),
+    PHONE_NOT_VERIFIED(HttpStatus.FORBIDDEN, "C203", "휴대폰 인증이 필요합니다."),
+    NO_SHOW_LIMIT(HttpStatus.FORBIDDEN, "C204", "노쇼 이력으로 인해 예약이 제한됩니다."),
+    STOCK_EXCEEDED(HttpStatus.CONFLICT, "C205", "예약 전용 재고가 부족합니다."),
+    TIME_SLOT_FULL(HttpStatus.CONFLICT, "C206", "선택한 픽업 시간대의 예약 정원이 가득 찼습니다."),
+    ALREADY_CANCELLED(HttpStatus.CONFLICT, "C207", "이미 취소된 예약입니다."),
+    ALREADY_COMPLETED(HttpStatus.CONFLICT, "C208", "이미 완료된 예약입니다."),
+    QR_EXPIRED(HttpStatus.CONFLICT, "C209", "QR 코드가 만료되었습니다."),
+    QR_ALREADY_USED(HttpStatus.CONFLICT, "C210", "이미 사용되었거나 유효하지 않은 QR 코드입니다."),
+    IDENTITY_MISMATCH(HttpStatus.CONFLICT, "C211", "신원 확인에 실패했습니다."),
+
+    /*
      * 409 CONFLICT: 리소스 충돌 (중복 데이터 등)
      */
     ALREADY_EXISTS(HttpStatus.CONFLICT, "C008", "이미 존재하는 데이터입니다."),
