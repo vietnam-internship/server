@@ -70,6 +70,8 @@ tags:
     description: 인앱 알림 조회 및 읽음 처리
   - name: Admin
     description: 관리자 — 예약/환율/지점/대시보드 관리
+  - name: AI Internal
+    description: AI 모듈 전용 내부(Internal) API (외부 접근 불가)
 
 paths:
   # ──────────────────────────── Auth ────────────────────────────
@@ -962,6 +964,261 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  # ──────────────────────────── AI Internal ────────────────────────────
+  /internal/ai/currencies/{code}/recommendations:
+    post:
+      tags: [AI Internal]
+      operationId: internalCreateAiRecommendation
+      summary: (Internal) AI 환율 추천 결과 저장
+      description: |
+        AI 모듈이 계산한 최신 환율 추천 등급 및 근거(AI_RECOMMENDATION)를 저장합니다.
+        외부 접근이 차단된 Internal API입니다.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CurrencyCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRecommendationCreateRequest'
+      responses:
+        '201':
+          description: 저장 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    format: int64
+                    example: 1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /internal/ai/currencies/{code}/signals:
+    post:
+      tags: [AI Internal]
+      operationId: internalCreateAiSignal
+      summary: (Internal) AI 통계 시그널 적재
+      description: |
+        AI 분석에 사용된 이동평균선 등 보조 지표 데이터를 저장합니다.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CurrencyCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiSignalCreateRequest'
+      responses:
+        '201':
+          description: 저장 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    format: int64
+                    example: 10
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /internal/ai/backtests:
+    post:
+      tags: [AI Internal]
+      operationId: internalCreateBacktestResult
+      summary: (Internal) 백테스트 결과 저장
+      description: |
+        주기적으로 실행된 AI 모델 적중률 검증 결과를 저장합니다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BacktestCreateRequest'
+      responses:
+        '201':
+          description: 저장 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    format: int64
+                    example: 5
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /internal/ai/tool-call-logs:
+    post:
+      tags: [AI Internal]
+      operationId: internalCreateToolCallLog
+      summary: (Internal) AI 에이전트 도구 호출 로그 저장
+      description: |
+        AI 에이전트가 시장 데이터 수집 등을 위해 내부적으로 호출한 도구들의 로그를 저장합니다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCallLogCreateRequest'
+      responses:
+        '201':
+          description: 저장 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    format: int64
+                    example: 100
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /internal/ai/currencies/{code}/news-articles:
+    post:
+      tags: [AI Internal]
+      operationId: internalCreateNewsArticle
+      summary: (Internal) 뉴스 및 감성 분석 지수 적재
+      description: |
+        AI가 수집한 외신 뉴스 메타데이터와 계산된 감성 분석 점수(sentimentScore)를 저장합니다.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CurrencyCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewsArticleCreateRequest'
+      responses:
+        '201':
+          description: 저장 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    format: int64
+                    example: 50
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /internal/ai/macro-indicators:
+    post:
+      tags: [AI Internal]
+      operationId: internalCreateMacroIndicator
+      summary: (Internal) 거시경제 지표 적재
+      description: |
+        AI 모듈이 주기적으로 수집한 국가별 선행 지표(금리, 인플레이션 등)를 저장합니다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MacroIndicatorCreateRequest'
+      responses:
+        '201':
+          description: 저장 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    format: int64
+                    example: 12
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ──────────────────────────── Branch Admin (Missing APIs) ────────────────────────────
+  /branches/{id}/reservations:
+    get:
+      tags: [Branch, Admin]
+      operationId: getBranchReservations
+      summary: (지점 직원) 본인 지점 예약 목록 조회
+      description: |
+        해당 지점의 직원(관리자)이 오늘 혹은 특정 날짜의 예약 목록을 조회합니다.
+        (QR 픽업 대기자 목록 확인용)
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - name: date
+          in: query
+          required: false
+          description: 조회할 날짜 (YYYY-MM-DD, 기본값 오늘)
+          schema:
+            type: string
+            format: date
+        - name: status
+          in: query
+          required: false
+          description: 필터링할 예약 상태 (예. CONFIRMED)
+          schema:
+            type: string
+            example: CONFIRMED
+      responses:
+        '200':
+          description: 지점 예약 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReservationDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /branches/{id}/time-slots/override:
+    post:
+      tags: [Branch, Admin]
+      operationId: createTimeSlotOverride
+      summary: (지점 직원) 지점 임시 휴무 및 정원 예외 설정
+      description: |
+        직원이 급하게 자리를 비우거나 조기 마감 시 특정 시간대의 정원을 강제로 블락 처리합니다.
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimeSlotOverrideRequest'
+      responses:
+        '201':
+          description: 예외 설정 완료
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    format: int64
+                    example: 1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
 # ════════════════════════════ Components ════════════════════════════
 components:
   securitySchemes:
@@ -1750,6 +2007,168 @@ components:
           description: 최근 확정 예약 목록
           items:
             $ref: '#/components/schemas/ReservationSummary'
+
+
+    # ---------- AI Internal Schemas ----------
+    AiRecommendationCreateRequest:
+      type: object
+      required: [recommendation, rationale, confidenceScore, modelVersion]
+      properties:
+        signalIds:
+          type: array
+          description: "이 추천 결과의 근거가 된 RECOMMENDATION_SIGNAL ID 목록 (다대다 매핑용)"
+          items:
+            type: integer
+            format: int64
+          example: [101, 102]
+        recommendation:
+          type: string
+          enum: [BUY, SELL, HOLD, NEUTRAL]
+          example: BUY
+        rationale:
+          type: string
+          example: "이동평균 20일선 돌파 및 단기 골든크로스 발생"
+        confidenceScore:
+          type: number
+          format: double
+          example: 0.85
+        modelVersion:
+          type: string
+          example: "v1.2.0"
+        expiresAt:
+          type: string
+          format: date-time
+          example: "2026-07-22T00:00:00Z"
+
+    AiSignalCreateRequest:
+      type: object
+      required: [signalType, windowDays, value]
+      properties:
+        signalType:
+          type: string
+          enum: [MA, RSI, MACD]
+          example: MA
+        windowDays:
+          type: integer
+          example: 20
+        value:
+          type: number
+          format: double
+          example: 1380.5
+
+    BacktestCreateRequest:
+      type: object
+      required: [currencyId, strategyType, periodStart, periodEnd, totalSignals, correctSignals, accuracyRate]
+      properties:
+        currencyId:
+          type: integer
+          format: int64
+          example: 1
+        strategyType:
+          type: string
+          enum: [LINEAR_REGRESSION, MOVING_AVERAGE, LOGISTIC_REGRESSION]
+          example: LINEAR_REGRESSION
+        periodStart:
+          type: string
+          format: date
+          example: "2025-01-01"
+        periodEnd:
+          type: string
+          format: date
+          example: "2026-01-01"
+        totalSignals:
+          type: integer
+          example: 100
+        correctSignals:
+          type: integer
+          example: 65
+        accuracyRate:
+          type: number
+          format: double
+          example: 0.65
+
+    ToolCallLogCreateRequest:
+      type: object
+      required: [recommendationId, toolName, toolInput, toolOutput]
+      properties:
+        recommendationId:
+          type: integer
+          format: int64
+          example: 1
+        toolName:
+          type: string
+          example: "fetch_macro_indicator"
+        toolInput:
+          type: string
+          example: '{"country":"US","indicator":"CPI"}'
+        toolOutput:
+          type: string
+          example: '{"value":3.1}'
+
+    TimeSlotOverrideRequest:
+      type: object
+      required: [targetDate, startTime, endTime, capacityLimit, isBlocked]
+      properties:
+        targetDate:
+          type: string
+          format: date
+          example: "2026-07-21"
+        startTime:
+          type: string
+          format: time
+          example: "14:00:00"
+        endTime:
+          type: string
+          format: time
+          example: "15:00:00"
+        capacityLimit:
+          type: integer
+          example: 0
+        isBlocked:
+          type: boolean
+          example: true
+
+    NewsArticleCreateRequest:
+      type: object
+      required: [title, source, url, publishedAt, sentimentScore]
+      properties:
+        title:
+          type: string
+          example: "Fed hints at potential rate cuts in September"
+        source:
+          type: string
+          example: "Bloomberg"
+        url:
+          type: string
+          example: "https://www.bloomberg.com/news/..."
+        publishedAt:
+          type: string
+          format: date-time
+          example: "2026-07-21T10:00:00Z"
+        sentimentScore:
+          type: number
+          format: double
+          description: "-1.0 (매우 부정) ~ 1.0 (매우 긍정)"
+          example: 0.85
+
+    MacroIndicatorCreateRequest:
+      type: object
+      required: [countryCode, indicatorType, value, recordedAt]
+      properties:
+        countryCode:
+          type: string
+          example: "US"
+        indicatorType:
+          type: string
+          example: "CPI"
+        value:
+          type: number
+          format: double
+          example: 3.1
+        recordedAt:
+          type: string
+          format: date
+          example: "2026-07-21"
 
 security:
   - bearerAuth: []
