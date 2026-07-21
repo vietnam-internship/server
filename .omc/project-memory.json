@@ -111,6 +111,12 @@
       "type": "file"
     },
     {
+      "path": "docs/openapi.yaml",
+      "accessCount": 9,
+      "lastAccessed": 1784603674764,
+      "type": "file"
+    },
+    {
       "path": "docs/erd.md",
       "accessCount": 8,
       "lastAccessed": 1784110402097,
@@ -312,12 +318,6 @@
       "path": "src/main/java/com/fptis/intern/server/global/config/WebCorsProperties.java",
       "accessCount": 2,
       "lastAccessed": 1784282325093,
-      "type": "file"
-    },
-    {
-      "path": "docs/openapi.yaml",
-      "accessCount": 1,
-      "lastAccessed": 1783937204700,
       "type": "file"
     },
     {
