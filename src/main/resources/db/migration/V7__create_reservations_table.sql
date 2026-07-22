@@ -1,0 +1,25 @@
+CREATE TABLE reservations (
+    id                 BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id            BIGINT       NOT NULL,
+    branch_id          BIGINT       NOT NULL,
+    currency_code      VARCHAR(10)  NOT NULL,
+    amount             DOUBLE       NOT NULL,
+    pickup_date        DATE         NOT NULL,
+    pickup_time        TIME         NOT NULL,
+    status             VARCHAR(20)  NOT NULL,
+    reservation_number VARCHAR(30)  NULL,
+    locked_rate        DOUBLE       NULL,
+    expires_at         DATETIME(6)  NULL,
+    qr_token           VARCHAR(64)  NULL,
+    picked_up_at       DATETIME(6)  NULL,
+    auto_expired       TINYINT(1)   NOT NULL DEFAULT 0,
+    created_at         DATETIME(6)  NOT NULL,
+    updated_at         DATETIME(6)  NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_reservations_reservation_number UNIQUE (reservation_number),
+    KEY idx_reservations_user_id (user_id),
+    KEY idx_reservations_branch_slot (branch_id, pickup_date, pickup_time),
+    CONSTRAINT fk_reservations_user FOREIGN KEY (user_id) REFERENCES users (id),
+    CONSTRAINT fk_reservations_branch FOREIGN KEY (branch_id) REFERENCES branches (id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4;
