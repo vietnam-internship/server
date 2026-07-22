@@ -72,7 +72,6 @@ class ReservationServiceTest {
                 .email("tester@example.com")
                 .role(Role.USER)
                 .build());
-        verifyPhone(verifiedUser);
 
         branch = branchRepository.save(Branch.builder()
                 .name("명동 환전센터")
@@ -100,15 +99,6 @@ class ReservationServiceTest {
         return new ReservationCreateRequest("USD", branch.getId(), amount, pickupDate, pickupTime);
     }
 
-    /**
-     * /auth/verify-phone(SMS 인증)은 아직 미구현이라 User에 정식 verifyPhone() 메서드가 없다 —
-     * 테스트에서는 리플렉션으로 phoneVerified만 직접 세팅한다.
-     */
-    private void verifyPhone(User user) {
-        ReflectionTestUtils.setField(user, "phoneVerified", true);
-        userRepository.save(user);
-    }
-
     @Test
     void createsReservationAndDecreasesStock() {
         ReservationDetailResponse response = reservationService.createReservation(
@@ -121,21 +111,6 @@ class ReservationServiceTest {
         BranchCurrencyRate rate = branchCurrencyRateRepository
                 .findRate(branch.getId(), "USD").orElseThrow();
         assertThat(rate.getReservationOnlyStock()).isEqualTo(500);
-    }
-
-    @Test
-    void rejectsWhenPhoneNotVerified() {
-        User unverified = userRepository.save(User.builder()
-                .name("unverified")
-                .email("unverified@example.com")
-                .role(Role.USER)
-                .build());
-
-        assertThatThrownBy(() -> reservationService.createReservation(
-                unverified.getId(), createRequest(LocalDate.now().plusDays(1), "10:30")))
-                .isInstanceOf(BusinessException.class)
-                .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(BusinessErrorCode.PHONE_NOT_VERIFIED);
     }
 
     @Test
@@ -156,7 +131,6 @@ class ReservationServiceTest {
                 .email("another@example.com")
                 .role(Role.USER)
                 .build());
-        verifyPhone(another);
 
         assertThatThrownBy(() -> reservationService.createReservation(
                 another.getId(), createRequest(LocalDate.now().plusDays(1), "10:30")))

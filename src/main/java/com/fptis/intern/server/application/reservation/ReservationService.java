@@ -9,7 +9,6 @@ import com.fptis.intern.server.domain.branch.BranchTimeSlotRepository;
 import com.fptis.intern.server.domain.reservation.Reservation;
 import com.fptis.intern.server.domain.reservation.ReservationRepository;
 import com.fptis.intern.server.domain.reservation.ReservationStatus;
-import com.fptis.intern.server.domain.user.User;
 import com.fptis.intern.server.domain.user.UserRepository;
 import com.fptis.intern.server.global.exception.BusinessErrorCode;
 import com.fptis.intern.server.global.exception.BusinessException;
@@ -53,13 +52,10 @@ public class ReservationService {
 
     @Transactional
     public ReservationDetailResponse createReservation(Long userId, ReservationCreateRequest request) {
-        User user = userRepository.findById(userId)
+        userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.UNAUTHORIZED));
         LocalDateTime now = LocalDateTime.now();
 
-        if (!user.isPhoneVerified()) {
-            throw new BusinessException(BusinessErrorCode.PHONE_NOT_VERIFIED);
-        }
         assertNoShowLimitNotExceeded(userId, now);
         // 금액 한도 검증(AMOUNT_LIMIT_EXCEEDED/AMOUNT_BELOW_MINIMUM)은 기준 환율(Currency 도메인)이
         // 있어야 USD/VND 상당액을 계산할 수 있어 이번 범위에서 생략한다 — #26에서 연동 예정.
