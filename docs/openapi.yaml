@@ -1036,7 +1036,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /internal/ai/backtests:
+  /internal/ai/currencies/{code}/backtests:
     post:
       tags: [AI Internal]
       operationId: internalCreateBacktestResult
@@ -1044,6 +1044,8 @@ paths:
       description: |
         주기적으로 실행된 AI 모델 적중률 검증 결과를 저장합니다.
       security: []
+      parameters:
+        - $ref: '#/components/parameters/CurrencyCode'
       requestBody:
         required: true
         content:
