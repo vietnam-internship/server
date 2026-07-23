@@ -131,9 +131,9 @@ public class ReservationService {
 
         LocalDateTime now = LocalDateTime.now();
         if (reservation.isExpired(now)) {
-            reservation.cancel(true);
-            restoreStock(reservation);
-            restoreTimeSlot(reservation);
+            // 여기서 취소/재고·슬롯 복원까지 하면, 뒤이은 QR_EXPIRED 예외(unchecked)가
+            // 트랜잭션 전체를 롤백시켜 방금 한 복원 작업까지 함께 사라진다.
+            // 실제 정리는 expireOverdueReservations() 스윕러가 전담하고, 여기서는 만료 여부만 판단해 응답한다.
             throw new BusinessException(BusinessErrorCode.QR_EXPIRED);
         }
         if (reservation.getStatus() == ReservationStatus.COMPLETED) {
