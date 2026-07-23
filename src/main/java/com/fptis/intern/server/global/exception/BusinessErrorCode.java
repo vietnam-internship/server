@@ -31,7 +31,7 @@ public enum BusinessErrorCode implements ErrorCode {
      */
     CURRENCY_NOT_FOUND(HttpStatus.NOT_FOUND, "C102", "존재하지 않는 통화 코드입니다."),
     SIGNAL_NOT_FOUND(HttpStatus.NOT_FOUND, "C103", "매핑하려는 시그널 정보를 찾을 수 없습니다."),
-    BRANCH_NOT_FOUND(HttpStatus.NOT_FOUND, "C106", "존재하지 않는 지점입니다."),
+
 
     /*
      * [김두현 C1xx] 409 CONFLICT: 리소스 충돌
