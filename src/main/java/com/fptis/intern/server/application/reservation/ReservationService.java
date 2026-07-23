@@ -209,8 +209,18 @@ public class ReservationService {
                 throw new BusinessException(BusinessErrorCode.NO_SHOW_LIMIT);
             }
         } else if (noShowCount >= 1) {
-            long activeCount = reservationRepository.countActiveReservations(userId, ReservationStatus.RESERVED, now);
-            if (activeCount >= 1) {
+            // 활성 예약 수를 세는 시점과 예약을 생성하는 시점 사이의 레이스를 막기 위해,
+            // 카운트를 읽기 전 유저 행에 락을 걸어 같은 유저의 동시 요청을 직렬화한다.
+            // 이 락은 트랜잭션이 끝날 때까지 유지되므로, 뒤이은 재고/슬롯 락(findForUpdate/lockForUpdate)과의
+            // 데드락을 피하려면 항상 유저 락을 먼저 잡아야 한다.
+            userRepository.findForUpdate(userId)
+                    .orElseThrow(() -> new BusinessException(BusinessErrorCode.UNAUTHORIZED));
+            // MySQL REPEATABLE READ에서 일반 SELECT는 유저 락 대기 전 스냅샷을 읽어 방금 커밋된
+            // 예약을 놓칠 수 있어, 최신 커밋 데이터를 보장하는 락 획득 읽기로 확인한다.
+            boolean hasActiveReservation = !reservationRepository
+                    .findActiveReservationsForUpdate(userId, ReservationStatus.RESERVED, now)
+                    .isEmpty();
+            if (hasActiveReservation) {
                 throw new BusinessException(BusinessErrorCode.NO_SHOW_LIMIT);
             }
         }

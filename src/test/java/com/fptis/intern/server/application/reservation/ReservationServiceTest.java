@@ -21,14 +21,25 @@ import com.fptis.intern.server.presentation.reservation.dto.ReservationCreateReq
 import com.fptis.intern.server.presentation.reservation.dto.ReservationDetailResponse;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -36,11 +47,17 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * ReservationService는 리포지토리에만 의존하므로 웹 계층 없이 @DataJpaTest 슬라이스에서
  * 직접 생성해 재고 차감/슬롯 정원/노쇼 제한 같은 핵심 비즈니스 규칙을 검증한다.
+ *
+ * ReservationService를 @Import로 빈 등록해 @Autowired로 주입받는다 — 유저 행 락(pessimistic lock)이
+ * createReservation() 메서드 트랜잭션 범위 전체에서 유지되는지 검증하려면(동시 요청 테스트),
+ * @Transactional AOP 프록시가 실제로 적용된 스프링 빈이어야 한다. 단순 new로 생성하면
+ * 리포지토리 호출마다 트랜잭션이 쪼개져 락이 곧바로 풀려버려 레이스를 재현할 수 없다.
  */
 @Testcontainers
 @DataJpaTest
 @EnableJpaAuditing
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import(ReservationService.class)
 class ReservationServiceTest {
 
     @Container
@@ -57,16 +74,14 @@ class ReservationServiceTest {
     private BranchCurrencyRateRepository branchCurrencyRateRepository;
     @Autowired
     private BranchTimeSlotRepository branchTimeSlotRepository;
-
+    @Autowired
     private ReservationService reservationService;
+
     private User verifiedUser;
     private Branch branch;
 
     @BeforeEach
     void setUp() {
-        reservationService = new ReservationService(reservationRepository, userRepository, branchRepository,
-                branchCurrencyRateRepository, branchTimeSlotRepository);
-
         verifiedUser = userRepository.save(User.builder()
                 .name("tester")
                 .email("tester@example.com")
@@ -137,6 +152,70 @@ class ReservationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(BusinessErrorCode.TIME_SLOT_FULL);
+    }
+
+    /**
+     * 노쇼 이력이 있는 유저가 서로 다른 두 스레드(=서로 다른 DB 커넥션/트랜잭션)에서 동시에
+     * 예약을 시도해도 유저 행 락(findForUpdate)에 의해 직렬화되어 1건만 성공해야 한다.
+     * 테스트 트랜잭션(@DataJpaTest 기본 롤백)을 NOT_SUPPORTED로 꺼서 setUp()에서 만든 데이터가
+     * 즉시 커밋되게 하고, 각 스레드가 진짜 자신만의 트랜잭션/락을 얻도록 한다 — 그래야 이 테스트가
+     * 실제 DB 락 경합을 재현한다. 이 때문에 테스트 종료 후 직접 데이터를 정리해 다음 테스트가
+     * 깨끗한 상태에서 시작하도록 한다.
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void concurrentRequestsFromNoShowUserOnlyOneSucceeds() throws Exception {
+        try {
+            ReservationDetailResponse noShowSource = reservationService.createReservation(
+                    verifiedUser.getId(), createRequest(LocalDate.now().plusDays(1), "09:00"));
+            Reservation noShowReservation = reservationRepository.findById(noShowSource.id()).orElseThrow();
+            ReflectionTestUtils.setField(noShowReservation, "expiresAt", LocalDateTime.now().minusMinutes(1));
+            reservationRepository.save(noShowReservation);
+            reservationService.expireOverdueReservations();
+
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch start = new CountDownLatch(1);
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            List<Future<BusinessErrorCode>> futures = new ArrayList<>();
+            futures.add(executor.submit(createReservationTask(ready, start, "10:00")));
+            futures.add(executor.submit(createReservationTask(ready, start, "10:30")));
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            List<BusinessErrorCode> outcomes = new ArrayList<>();
+            for (Future<BusinessErrorCode> future : futures) {
+                outcomes.add(future.get(10, TimeUnit.SECONDS));
+            }
+            executor.shutdown();
+
+            assertThat(outcomes).containsExactlyInAnyOrder(null, BusinessErrorCode.NO_SHOW_LIMIT);
+
+            long activeCount = reservationRepository.countActiveReservations(
+                    verifiedUser.getId(), ReservationStatus.RESERVED, LocalDateTime.now());
+            assertThat(activeCount).isEqualTo(1);
+        } finally {
+            reservationRepository.deleteAll();
+            branchTimeSlotRepository.deleteAll();
+            branchCurrencyRateRepository.deleteAll();
+            branchRepository.deleteAll();
+            userRepository.deleteAll();
+        }
+    }
+
+    private Callable<BusinessErrorCode> createReservationTask(CountDownLatch ready, CountDownLatch start,
+                                                                String pickupTime) {
+        return () -> {
+            ready.countDown();
+            start.await();
+            try {
+                reservationService.createReservation(verifiedUser.getId(),
+                        createRequest(LocalDate.now().plusDays(1), pickupTime));
+                return null;
+            } catch (BusinessException e) {
+                return (BusinessErrorCode) e.getErrorCode();
+            }
+        };
     }
 
     @Test
