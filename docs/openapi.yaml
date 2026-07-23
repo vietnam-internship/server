@@ -1036,7 +1036,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /internal/ai/backtests:
+  /internal/ai/currencies/{code}/backtests:
     post:
       tags: [AI Internal]
       operationId: internalCreateBacktestResult
@@ -1044,6 +1044,8 @@ paths:
       description: |
         주기적으로 실행된 AI 모델 적중률 검증 결과를 저장합니다.
       security: []
+      parameters:
+        - $ref: '#/components/parameters/CurrencyCode'
       requestBody:
         required: true
         content:
@@ -1133,39 +1135,6 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
-  /branches/{id}/time-slots/override:
-    post:
-      tags: [Branch, Admin]
-      operationId: createTimeSlotOverride
-      summary: (지점 직원) 지점 임시 휴무 및 정원 예외 설정
-      description: |
-        직원이 급하게 자리를 비우거나 조기 마감 시 특정 시간대의 정원을 강제로 블락 처리합니다.
-      parameters:
-        - $ref: '#/components/parameters/BranchId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TimeSlotOverrideRequest'
-      responses:
-        '201':
-          description: 예외 설정 완료
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: integer
-                    format: int64
-                    example: 1
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
 
 # ════════════════════════════ Components ════════════════════════════
 components:
@@ -2035,28 +2004,6 @@ components:
           format: double
           example: 0.65
 
-    TimeSlotOverrideRequest:
-      type: object
-      required: [targetDate, startTime, endTime, capacityLimit, isBlocked]
-      properties:
-        targetDate:
-          type: string
-          format: date
-          example: "2026-07-21"
-        startTime:
-          type: string
-          format: time
-          example: "14:00:00"
-        endTime:
-          type: string
-          format: time
-          example: "15:00:00"
-        capacityLimit:
-          type: integer
-          example: 0
-        isBlocked:
-          type: boolean
-          example: true
 
     MacroIndicatorCreateRequest:
       type: object
