@@ -47,3 +47,5 @@ k8s/overlays/*/secret.env
 .env.staging
 
 ./logs/
+# Claude Code / oh-my-claudecode 내부 세션 상태 (커밋 대상 아님)
+.omc/
