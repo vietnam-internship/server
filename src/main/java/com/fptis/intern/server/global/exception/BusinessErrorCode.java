@@ -58,6 +58,11 @@ public enum BusinessErrorCode implements ErrorCode {
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "C007", "허용되지 않은 메서드입니다."),
 
     /*
+     * 이견희 : C2xx (Branch)
+     */
+    BRANCH_NOT_FOUND(HttpStatus.NOT_FOUND, "C201", "존재하지 않는 지점입니다."),
+
+    /*
      * 409 CONFLICT: 리소스 충돌 (중복 데이터 등)
      */
     ALREADY_EXISTS(HttpStatus.CONFLICT, "C008", "이미 존재하는 데이터입니다."),
