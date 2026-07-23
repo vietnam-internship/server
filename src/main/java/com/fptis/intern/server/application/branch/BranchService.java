@@ -34,9 +34,9 @@ public class BranchService {
 
     public List<BranchSummaryResponse> listBranches(String currencyCode, Double latitude, Double longitude,
                                                       BranchSortType sort) {
-        List<Branch> branches = branchRepository.findByActiveTrue();
+        List<Branch> branches = branchRepository.findActiveBranches();
         List<Long> branchIds = branches.stream().map(Branch::getId).toList();
-        Map<Long, List<BranchCurrencyRate>> ratesByBranch = branchCurrencyRateRepository.findByBranchIdIn(branchIds)
+        Map<Long, List<BranchCurrencyRate>> ratesByBranch = branchCurrencyRateRepository.findRatesByBranches(branchIds)
                 .stream()
                 .collect(Collectors.groupingBy(BranchCurrencyRate::getBranchId));
 
@@ -54,7 +54,7 @@ public class BranchService {
 
     public BranchDetailResponse getBranch(Long id) {
         Branch branch = getBranchOrThrow(id);
-        List<BranchCurrencyRate> rates = branchCurrencyRateRepository.findByBranchId(id);
+        List<BranchCurrencyRate> rates = branchCurrencyRateRepository.findRatesByBranch(id);
         return BranchDetailResponse.of(branch, rates);
     }
 
@@ -62,7 +62,7 @@ public class BranchService {
     public BranchCurrencyRateResponse updateBranchRate(Long branchId, BranchRateUpdateRequest request) {
         getBranchOrThrow(branchId);
         BranchCurrencyRate rate = branchCurrencyRateRepository
-                .findByBranchIdAndCurrencyCode(branchId, request.currencyCode())
+                .findRate(branchId, request.currencyCode())
                 .orElseGet(() -> BranchCurrencyRate.builder()
                         .branchId(branchId)
                         .currencyCode(request.currencyCode())
@@ -97,7 +97,7 @@ public class BranchService {
         branch.update(request.name(), request.address(), request.latitude(), request.longitude(), request.phone(),
                 request.businessHours(), request.pickupLocationDetail(), request.timeSlotCapacity(),
                 request.supportedCurrencies(), request.active());
-        List<BranchCurrencyRate> rates = branchCurrencyRateRepository.findByBranchId(id);
+        List<BranchCurrencyRate> rates = branchCurrencyRateRepository.findRatesByBranch(id);
         return BranchDetailResponse.of(branch, rates);
     }
 
