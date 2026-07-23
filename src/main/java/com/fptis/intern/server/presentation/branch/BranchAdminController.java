@@ -3,7 +3,6 @@ package com.fptis.intern.server.presentation.branch;
 import com.fptis.intern.server.application.branch.BranchAdminService;
 import com.fptis.intern.server.global.annotation.RequireAuth;
 import com.fptis.intern.server.global.exception.ApiResponse;
-import com.fptis.intern.server.presentation.branch.dto.TimeSlotOverrideRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,17 +28,6 @@ public class BranchAdminController {
     // TODO: Auth 연동 완료 후 SecurityContext(JwtToken 등)에서 실제 접속 직원의 소속 지점 ID를 추출하도록 변경
     private Long extractTokenBranchId() {
         return 1L; // 임시 하드코딩
-    }
-
-    @RequireAuth(roles = {"BRANCH_ADMIN", "ADMIN"})
-    @ResponseStatus(HttpStatus.CREATED)
-    @PostMapping("/{id}/time-slots/override")
-    public ApiResponse<?> overrideTimeSlot(
-            @PathVariable Long id,
-            @Valid @RequestBody TimeSlotOverrideRequest request) {
-        
-        Long tokenBranchId = extractTokenBranchId();
-        return ApiResponse.success(branchAdminService.overrideTimeSlot(id, tokenBranchId, request));
     }
 
     @RequireAuth(roles = {"BRANCH_ADMIN", "ADMIN"})

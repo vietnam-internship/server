@@ -47,18 +47,6 @@ datetime updated_at
         datetime updated_at
     }
 
-    BRANCH_TIME_SLOT_OVERRIDE {
-        bigint id PK
-        bigint branch_id FK
-        date target_date
-        time start_time
-        time end_time
-        int capacity_limit
-        boolean is_blocked
-        datetime created_at
-        datetime updated_at
-    }
-
     BRANCH_TIME_SLOT {
         bigint id PK
         bigint branch_id FK
@@ -174,7 +162,6 @@ datetime updated_at
 
     BRANCH ||--o{ BRANCH_OPERATING_HOURS : "has"
     BRANCH ||--o{ BRANCH_TIME_SLOT_CONFIG : "has"
-    BRANCH ||--o{ BRANCH_TIME_SLOT_OVERRIDE : "has"
     BRANCH ||--o{ BRANCH_TIME_SLOT : "has"
     BRANCH ||--o{ BRANCH_CURRENCY_INVENTORY : "has"
     CURRENCY ||--o{ BRANCH_CURRENCY_INVENTORY : "has"

@@ -1,10 +1,6 @@
 package com.fptis.intern.server.application.branch;
 
-import com.fptis.intern.server.domain.branch.BranchTimeSlotOverride;
-import com.fptis.intern.server.domain.branch.BranchTimeSlotOverrideRepository;
 import com.fptis.intern.server.presentation.branch.dto.BranchReservationListResponse;
-import com.fptis.intern.server.presentation.branch.dto.TimeSlotOverrideRequest;
-import com.fptis.intern.server.presentation.branch.dto.TimeSlotOverrideResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,25 +13,7 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class BranchAdminService {
 
-    private final BranchTimeSlotOverrideRepository branchTimeSlotOverrideRepository;
     // private final ReservationRepository reservationRepository; // TODO: Reservation 도메인 작업 시 주석 해제
-
-    @Transactional
-    public TimeSlotOverrideResponse overrideTimeSlot(Long pathBranchId, Long tokenBranchId, TimeSlotOverrideRequest request) {
-        verifyBranchAccess(pathBranchId, tokenBranchId);
-
-        BranchTimeSlotOverride override = BranchTimeSlotOverride.builder()
-                .branchId(pathBranchId)
-                .targetDate(request.targetDate())
-                .startTime(request.startTime())
-                .endTime(request.endTime())
-                .capacityLimit(request.capacityLimit())
-                .isBlocked(request.isBlocked())
-                .build();
-
-        BranchTimeSlotOverride saved = branchTimeSlotOverrideRepository.save(override);
-        return TimeSlotOverrideResponse.from(saved.getId());
-    }
 
     public BranchReservationListResponse getReservations(Long pathBranchId, Long tokenBranchId, LocalDate date) {
         verifyBranchAccess(pathBranchId, tokenBranchId);
