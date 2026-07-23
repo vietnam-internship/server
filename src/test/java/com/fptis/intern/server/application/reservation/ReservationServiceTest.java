@@ -7,6 +7,7 @@ import com.fptis.intern.server.domain.branch.Branch;
 import com.fptis.intern.server.domain.branch.BranchCurrencyRate;
 import com.fptis.intern.server.domain.branch.BranchCurrencyRateRepository;
 import com.fptis.intern.server.domain.branch.BranchRepository;
+import com.fptis.intern.server.domain.branch.BranchTimeSlot;
 import com.fptis.intern.server.domain.branch.BranchTimeSlotRepository;
 import com.fptis.intern.server.domain.reservation.Reservation;
 import com.fptis.intern.server.domain.reservation.ReservationRepository;
@@ -23,12 +24,15 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -157,10 +161,6 @@ class ReservationServiceTest {
     /**
      * 노쇼 이력이 있는 유저가 서로 다른 두 스레드(=서로 다른 DB 커넥션/트랜잭션)에서 동시에
      * 예약을 시도해도 유저 행 락(findForUpdate)에 의해 직렬화되어 1건만 성공해야 한다.
-     * 테스트 트랜잭션(@DataJpaTest 기본 롤백)을 NOT_SUPPORTED로 꺼서 setUp()에서 만든 데이터가
-     * 즉시 커밋되게 하고, 각 스레드가 진짜 자신만의 트랜잭션/락을 얻도록 한다 — 그래야 이 테스트가
-     * 실제 DB 락 경합을 재현한다. 이 때문에 테스트 종료 후 직접 데이터를 정리해 다음 테스트가
-     * 깨끗한 상태에서 시작하도록 한다.
      */
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -173,21 +173,10 @@ class ReservationServiceTest {
             reservationRepository.save(noShowReservation);
             reservationService.expireOverdueReservations();
 
-            CountDownLatch ready = new CountDownLatch(2);
-            CountDownLatch start = new CountDownLatch(1);
-            ExecutorService executor = Executors.newFixedThreadPool(2);
-            List<Future<BusinessErrorCode>> futures = new ArrayList<>();
-            futures.add(executor.submit(createReservationTask(ready, start, "10:00")));
-            futures.add(executor.submit(createReservationTask(ready, start, "10:30")));
-
-            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
-            start.countDown();
-
-            List<BusinessErrorCode> outcomes = new ArrayList<>();
-            for (Future<BusinessErrorCode> future : futures) {
-                outcomes.add(future.get(10, TimeUnit.SECONDS));
-            }
-            executor.shutdown();
+            List<Callable<BusinessErrorCode>> tasks = List.of(
+                    createReservationTask(verifiedUser.getId(), createRequest(LocalDate.now().plusDays(1), "10:00")),
+                    createReservationTask(verifiedUser.getId(), createRequest(LocalDate.now().plusDays(1), "10:30")));
+            List<BusinessErrorCode> outcomes = runConcurrently(tasks);
 
             assertThat(outcomes).containsExactlyInAnyOrder(null, BusinessErrorCode.NO_SHOW_LIMIT);
 
@@ -195,27 +184,174 @@ class ReservationServiceTest {
                     verifiedUser.getId(), ReservationStatus.RESERVED, LocalDateTime.now());
             assertThat(activeCount).isEqualTo(1);
         } finally {
-            reservationRepository.deleteAll();
-            branchTimeSlotRepository.deleteAll();
-            branchCurrencyRateRepository.deleteAll();
-            branchRepository.deleteAll();
-            userRepository.deleteAll();
+            cleanUpAllReservationData();
         }
     }
 
-    private Callable<BusinessErrorCode> createReservationTask(CountDownLatch ready, CountDownLatch start,
-                                                                String pickupTime) {
+    /**
+     * 재고(reservationOnlyStock)보다 많은 동시 요청이 몰려도 정확히 재고 수량만큼만 성공해야 한다.
+     * 슬롯 정원은 요청 수보다 넉넉하게 둬서 재고만 경합 자원이 되게 한다.
+     * BranchCurrencyRateRepository#findForUpdate의 PESSIMISTIC_WRITE 락이 실수로 지워지거나
+     * 락 범위가 바뀌면(예: 락 획득 전에 재고를 미리 읽어버리는 식으로) 이 테스트가 초과 판매를 잡아낸다.
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void concurrentRequestsExceedingStockOnlySucceedUpToStock() throws Exception {
+        int stock = 10;
+        int requestCount = 20;
+        try {
+            Branch stockTestBranch = saveTestBranch("재고 동시성 테스트 지점", requestCount);
+            branchCurrencyRateRepository.save(BranchCurrencyRate.builder()
+                    .branchId(stockTestBranch.getId())
+                    .currencyCode("USD")
+                    .preferentialRate(0.5)
+                    .reservationOnlyStock(stock)
+                    .build());
+
+            List<Callable<BusinessErrorCode>> tasks = new ArrayList<>();
+            for (int i = 0; i < requestCount; i++) {
+                User requester = saveTestUser("stock-tester-" + i);
+                tasks.add(createReservationTask(requester.getId(),
+                        new ReservationCreateRequest("USD", stockTestBranch.getId(), 1,
+                                LocalDate.now().plusDays(1), "11:00")));
+            }
+            List<BusinessErrorCode> outcomes = runConcurrently(tasks);
+
+            assertThat(outcomes.stream().filter(Objects::isNull).count()).isEqualTo(stock);
+            assertThat(outcomes.stream().filter(o -> o == BusinessErrorCode.STOCK_EXCEEDED).count())
+                    .isEqualTo(requestCount - stock);
+
+            BranchCurrencyRate finalRate = branchCurrencyRateRepository
+                    .findRate(stockTestBranch.getId(), "USD").orElseThrow();
+            assertThat(finalRate.getReservationOnlyStock()).isEqualTo(0);
+
+            long reservedCount = reservationRepository.findAll().stream()
+                    .filter(r -> r.getBranchId().equals(stockTestBranch.getId()))
+                    .count();
+            assertThat(reservedCount).isEqualTo(stock);
+        } finally {
+            cleanUpAllReservationData();
+        }
+    }
+
+    /**
+     * 픽업 슬롯 정원(timeSlotCapacity)보다 많은 동시 요청이 몰려도 정확히 정원만큼만 성공해야 한다.
+     * 재고는 요청 수보다 넉넉하게 둬서 슬롯 정원만 경합 자원이 되게 한다.
+     * BranchTimeSlotRepository#lockForUpdate의 PESSIMISTIC_WRITE 락 회귀를 잡아낸다.
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void concurrentRequestsExceedingSlotCapacityOnlySucceedUpToCapacity() throws Exception {
+        int capacity = 10;
+        int requestCount = 20;
+        LocalDate pickupDate = LocalDate.now().plusDays(1);
+        try {
+            Branch slotTestBranch = saveTestBranch("슬롯 동시성 테스트 지점", capacity);
+            branchCurrencyRateRepository.save(BranchCurrencyRate.builder()
+                    .branchId(slotTestBranch.getId())
+                    .currencyCode("USD")
+                    .preferentialRate(0.5)
+                    .reservationOnlyStock(requestCount * 1000)
+                    .build());
+
+            List<Callable<BusinessErrorCode>> tasks = new ArrayList<>();
+            for (int i = 0; i < requestCount; i++) {
+                User requester = saveTestUser("slot-tester-" + i);
+                tasks.add(createReservationTask(requester.getId(),
+                        new ReservationCreateRequest("USD", slotTestBranch.getId(), 1, pickupDate, "12:00")));
+            }
+            List<BusinessErrorCode> outcomes = runConcurrently(tasks);
+
+            assertThat(outcomes.stream().filter(Objects::isNull).count()).isEqualTo(capacity);
+            assertThat(outcomes.stream().filter(o -> o == BusinessErrorCode.TIME_SLOT_FULL).count())
+                    .isEqualTo(requestCount - capacity);
+
+            BranchTimeSlot finalSlot = branchTimeSlotRepository.findAll().stream()
+                    .filter(s -> s.getBranchId().equals(slotTestBranch.getId()))
+                    .findFirst().orElseThrow();
+            assertThat(finalSlot.getRemaining()).isEqualTo(0);
+
+            long reservedCount = reservationRepository.findAll().stream()
+                    .filter(r -> r.getBranchId().equals(slotTestBranch.getId()))
+                    .count();
+            assertThat(reservedCount).isEqualTo(capacity);
+        } finally {
+            cleanUpAllReservationData();
+        }
+    }
+
+    private Branch saveTestBranch(String name, int timeSlotCapacity) {
+        return branchRepository.save(Branch.builder()
+                .name(name)
+                .address("서울 중구 명동길 2")
+                .latitude(37.5665)
+                .longitude(126.9780)
+                .phone("02-000-0000")
+                .businessHours("평일 09:00-18:00")
+                .timeSlotCapacity(timeSlotCapacity)
+                .build());
+    }
+
+    private User saveTestUser(String namePrefix) {
+        return userRepository.save(User.builder()
+                .name(namePrefix)
+                .email(namePrefix + "@example.com")
+                .role(Role.USER)
+                .build());
+    }
+
+    private Callable<BusinessErrorCode> createReservationTask(Long userId, ReservationCreateRequest request) {
         return () -> {
-            ready.countDown();
-            start.await();
             try {
-                reservationService.createReservation(verifiedUser.getId(),
-                        createRequest(LocalDate.now().plusDays(1), pickupTime));
+                reservationService.createReservation(userId, request);
                 return null;
             } catch (BusinessException e) {
                 return (BusinessErrorCode) e.getErrorCode();
             }
         };
+    }
+
+    /**
+     * tasks를 CountDownLatch로 동시에 시작시켜 실제 DB 락 경합을 재현한 뒤, 각 결과를 순서 없이 모아 반환한다.
+     */
+    private <T> List<T> runConcurrently(List<Callable<T>> tasks) throws InterruptedException, ExecutionException, TimeoutException {
+        int size = tasks.size();
+        CountDownLatch ready = new CountDownLatch(size);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(size);
+        try {
+            List<Future<T>> futures = new ArrayList<>();
+            for (Callable<T> task : tasks) {
+                futures.add(executor.submit(() -> {
+                    ready.countDown();
+                    start.await();
+                    return task.call();
+                }));
+            }
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            List<T> results = new ArrayList<>();
+            for (Future<T> future : futures) {
+                results.add(future.get(15, TimeUnit.SECONDS));
+            }
+            return results;
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    /**
+     * NOT_SUPPORTED로 테스트 트랜잭션 롤백을 꺼둔 동시성 테스트는 setUp()에서 만든 데이터까지
+     * 즉시 커밋되므로, 다음 테스트가 깨끗한 상태에서 시작하도록 직접 정리한다.
+     */
+    private void cleanUpAllReservationData() {
+        reservationRepository.deleteAll();
+        branchTimeSlotRepository.deleteAll();
+        branchCurrencyRateRepository.deleteAll();
+        branchRepository.deleteAll();
+        userRepository.deleteAll();
     }
 
     @Test
