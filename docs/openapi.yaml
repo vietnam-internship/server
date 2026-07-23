@@ -428,42 +428,6 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /branches/{id}/rate:
-    patch:
-      tags: [Branch]
-      operationId: updateBranchRate
-      summary: (지점) 우대율·예약 전용 재고 설정
-      description: |
-        지점이 매일 아침 관리자 페이지에서 통화별 **우대율(%)**과 **예약 전용 재고**를
-        설정합니다. (PRD §8, §20.1)
-
-        - 우대율은 즉시 반영: 최종 환율 = 기준 환율 × (1 − preferentialRate)
-        - 예약 전용 재고는 워크인 재고와 분리되며, 앱 예약은 이 수량에서만 차감됩니다.
-          소진 시 해당 지점/통화는 "당일 예약 마감"으로 표시됩니다(정상 상태).
-      parameters:
-        - $ref: '#/components/parameters/BranchId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BranchRateUpdateRequest'
-      responses:
-        '200':
-          description: 우대율/재고 반영 완료
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BranchCurrencyRate'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
   /branches/{id}/reservations/{reservationId}/redeem:
     post:
       tags: [Branch]
@@ -897,6 +861,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BranchDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/branches/{id}/rate:
+    patch:
+      tags: [Admin]
+      operationId: adminUpdateBranchRate
+      summary: (지점) 우대율·예약 전용 재고 설정
+      description: |
+        지점이 매일 아침 관리자 페이지에서 통화별 **우대율(%)**과 **예약 전용 재고**를
+        설정합니다. (PRD §8, §20.1)
+
+        - 우대율은 즉시 반영: 최종 환율 = 기준 환율 × (1 − preferentialRate)
+        - 예약 전용 재고는 워크인 재고와 분리되며, 앱 예약은 이 수량에서만 차감됩니다.
+          소진 시 해당 지점/통화는 "당일 예약 마감"으로 표시됩니다(정상 상태).
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchRateUpdateRequest'
+      responses:
+        '200':
+          description: 우대율/재고 반영 완료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchCurrencyRate'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
