@@ -1,5 +1,6 @@
 package com.fptis.intern.server.presentation.branch;
 
+import com.fptis.intern.server.application.branch.BranchAdminService;
 import com.fptis.intern.server.application.branch.BranchService;
 import com.fptis.intern.server.global.annotation.RequireAuth;
 import com.fptis.intern.server.global.exception.ApiResponse;
@@ -8,23 +9,14 @@ import com.fptis.intern.server.presentation.branch.dto.BranchRateUpdateRequest;
 import com.fptis.intern.server.presentation.branch.dto.BranchUpdateRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.PatchMapping;
-import com.fptis.intern.server.application.branch.BranchAdminService;
-import com.fptis.intern.server.global.annotation.RequireAuth;
-import com.fptis.intern.server.global.exception.ApiResponse;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
-
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -37,9 +29,13 @@ import java.time.LocalDate;
 public class BranchAdminController {
 
     private final BranchService branchService;
+    private final BranchAdminService branchAdminService;
 
-    // TODO(#40): UserRole이 USER/BRANCH_ADMIN/ADMIN/AI_AGENT 4종으로 분리되면
-    // 지점 생성/수정은 시스템 관리자 영역이므로 ADMIN을 유지한다.
+    // TODO: Auth 연동 완료 후 SecurityContext(JwtToken 등)에서 실제 접속 직원의 소속 지점 ID를 추출하도록 변경
+    private Long extractTokenBranchId() {
+        return 1L; // 임시 하드코딩
+    }
+
     @RequireAuth(roles = "ADMIN")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping
@@ -53,18 +49,11 @@ public class BranchAdminController {
         return ApiResponse.success(branchService.updateBranch(id, request));
     }
 
-    // TODO(#40): UserRole에 BRANCH_ADMIN이 추가되면 roles를 "BRANCH_ADMIN"으로 변경한다 —
-    // 지점 직원이 매일 아침 자기 지점의 우대율/재고를 설정하는 API이지 시스템 관리자용이 아니다.
-    // #40이 develop에 아직 머지되지 않아 BRANCH_ADMIN 역할을 가진 유저가 없으므로 우선 ADMIN으로 둔다.
-    @RequireAuth(roles = "ADMIN")
+    // PR #40 반영: 지점 직원이 우대율을 설정할 수 있도록 BRANCH_ADMIN 권한 추가
+    @RequireAuth(roles = {"BRANCH_ADMIN", "ADMIN"})
     @PatchMapping("/{id}/rate")
     public ApiResponse<?> updateBranchRate(@PathVariable Long id, @Valid @RequestBody BranchRateUpdateRequest request) {
         return ApiResponse.success(branchService.updateBranchRate(id, request));
-    private final BranchAdminService branchAdminService;
-
-    // TODO: Auth 연동 완료 후 SecurityContext(JwtToken 등)에서 실제 접속 직원의 소속 지점 ID를 추출하도록 변경
-    private Long extractTokenBranchId() {
-        return 1L; // 임시 하드코딩
     }
 
     @RequireAuth(roles = {"BRANCH_ADMIN", "ADMIN"})

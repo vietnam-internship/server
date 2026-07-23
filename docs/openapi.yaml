@@ -950,6 +950,28 @@ paths:
           소진 시 해당 지점/통화는 "당일 예약 마감"으로 표시됩니다(정상 상태).
       parameters:
         - $ref: '#/components/parameters/BranchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchRateUpdateRequest'
+      responses:
+        '200':
+          description: 우대율/재고 반영 완료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchCurrencyRate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   # ──────────────────────────── AI Internal ────────────────────────────
   /internal/ai/currencies/{code}/recommendations:
     post:
@@ -998,16 +1020,6 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BranchRateUpdateRequest'
-      responses:
-        '200':
-          description: 우대율/재고 반영 완료
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BranchCurrencyRate'
-        '400':
-          $ref: '#/components/responses/BadRequest'
               $ref: '#/components/schemas/AiSignalCreateRequest'
       responses:
         '201':
