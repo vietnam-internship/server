@@ -3,10 +3,10 @@ name: Just Build with JDK 21
 on:
   pull_request:
     branches:
-      - 'main'
+      - 'develop'
   push:
     branches:
-      - 'main'
+      - 'devlop'
 
   workflow_dispatch:
 
