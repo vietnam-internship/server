@@ -1065,66 +1065,6 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /internal/ai/tool-call-logs:
-    post:
-      tags: [AI Internal]
-      operationId: internalCreateToolCallLog
-      summary: (Internal) AI 에이전트 도구 호출 로그 저장
-      description: |
-        AI 에이전트가 시장 데이터 수집 등을 위해 내부적으로 호출한 도구들의 로그를 저장합니다.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ToolCallLogCreateRequest'
-      responses:
-        '201':
-          description: 저장 성공
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: integer
-                    format: int64
-                    example: 100
-        '400':
-          $ref: '#/components/responses/BadRequest'
-
-  /internal/ai/currencies/{code}/news-articles:
-    post:
-      tags: [AI Internal]
-      operationId: internalCreateNewsArticle
-      summary: (Internal) 뉴스 및 감성 분석 지수 적재
-      description: |
-        AI가 수집한 외신 뉴스 메타데이터와 계산된 감성 분석 점수(sentimentScore)를 저장합니다.
-      security: []
-      parameters:
-        - $ref: '#/components/parameters/CurrencyCode'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NewsArticleCreateRequest'
-      responses:
-        '201':
-          description: 저장 성공
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: integer
-                    format: int64
-                    example: 50
-        '400':
-          $ref: '#/components/responses/BadRequest'
-
   /internal/ai/macro-indicators:
     post:
       tags: [AI Internal]
@@ -2095,24 +2035,6 @@ components:
           format: double
           example: 0.65
 
-    ToolCallLogCreateRequest:
-      type: object
-      required: [recommendationId, toolName, toolInput, toolOutput]
-      properties:
-        recommendationId:
-          type: integer
-          format: int64
-          example: 1
-        toolName:
-          type: string
-          example: "fetch_macro_indicator"
-        toolInput:
-          type: string
-          example: '{"country":"US","indicator":"CPI"}'
-        toolOutput:
-          type: string
-          example: '{"value":3.1}'
-
     TimeSlotOverrideRequest:
       type: object
       required: [targetDate, startTime, endTime, capacityLimit, isBlocked]
@@ -2135,29 +2057,6 @@ components:
         isBlocked:
           type: boolean
           example: true
-
-    NewsArticleCreateRequest:
-      type: object
-      required: [title, source, url, publishedAt, sentimentScore]
-      properties:
-        title:
-          type: string
-          example: "Fed hints at potential rate cuts in September"
-        source:
-          type: string
-          example: "Bloomberg"
-        url:
-          type: string
-          example: "https://www.bloomberg.com/news/..."
-        publishedAt:
-          type: string
-          format: date-time
-          example: "2026-07-21T10:00:00Z"
-        sentimentScore:
-          type: number
-          format: double
-          description: "-1.0 (매우 부정) ~ 1.0 (매우 긍정)"
-          example: 0.85
 
     MacroIndicatorCreateRequest:
       type: object
