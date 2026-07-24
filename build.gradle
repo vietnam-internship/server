@@ -74,6 +74,9 @@ dependencies {
 
     // Google OAuth ID token 검증
     implementation 'com.google.api-client:google-api-client:2.7.0'
+
+    // Stripe (결제) — discussion#16 방안 2(Hold→Pay 분리): PaymentIntent 생성 + 웹훅 검증
+    implementation 'com.stripe:stripe-java:29.2.0'
 }
 
 tasks.named('test') {

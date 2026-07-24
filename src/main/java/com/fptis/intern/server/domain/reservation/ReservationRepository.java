@@ -47,4 +47,10 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     @Query("select r from Reservation r where r.status = :status and r.expiresAt < :now")
     List<Reservation> findExpiredReservations(@Param("status") ReservationStatus status, @Param("now") LocalDateTime now);
+
+    @Query("select r from Reservation r where r.status = :status and r.paymentExpiresAt < :now")
+    List<Reservation> findExpiredPendingPayments(@Param("status") ReservationStatus status, @Param("now") LocalDateTime now);
+
+    @Query("select count(r) from Reservation r where r.userId = :userId and r.status = :status")
+    long countByUserIdAndStatus(@Param("userId") Long userId, @Param("status") ReservationStatus status);
 }

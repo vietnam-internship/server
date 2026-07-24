@@ -1,5 +1,7 @@
 package com.fptis.intern.server.application.reservation;
 
+import com.fptis.intern.server.application.payment.PaymentIntentResult;
+import com.fptis.intern.server.application.payment.PaymentService;
 import com.fptis.intern.server.domain.branch.Branch;
 import com.fptis.intern.server.domain.branch.BranchCurrencyRate;
 import com.fptis.intern.server.domain.branch.BranchCurrencyRateRepository;
@@ -21,13 +23,8 @@ import com.fptis.intern.server.presentation.reservation.dto.ReservationPageRespo
 import com.fptis.intern.server.presentation.reservation.dto.ReservationSummaryResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.SecureRandom;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -41,15 +38,21 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class ReservationService {
 
-    private static final DateTimeFormatter RESERVATION_NUMBER_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
-
     private final ReservationRepository reservationRepository;
     private final UserRepository userRepository;
     private final BranchRepository branchRepository;
     private final BranchCurrencyRateRepository branchCurrencyRateRepository;
     private final BranchTimeSlotRepository branchTimeSlotRepository;
+    private final ReservationHoldService reservationHoldService;
+    private final PaymentService paymentService;
 
+    /**
+     * 이 메서드 자체는 직접 쓰기를 하지 않지만, 클래스 기본값(readOnly=true)을 그대로 두면
+     * reservationHoldService.createHold()가 같은 물리 트랜잭션에 join되어 그 안의
+     * SELECT ... FOR UPDATE가 "READ ONLY transaction" 에러로 실패한다 — Spring은 REQUIRED
+     * propagation으로 참여하는 하위 트랜잭션의 readOnly 속성을 무시하고 바깥쪽(첫 트랜잭션)
+     * 설정을 그대로 쓰기 때문이다. 그래서 여기서 명시적으로 쓰기 트랜잭션을 연다.
+     */
     @Transactional
     public ReservationDetailResponse createReservation(Long userId, ReservationCreateRequest request) {
         userRepository.findById(userId)
@@ -57,37 +60,24 @@ public class ReservationService {
         LocalDateTime now = LocalDateTime.now();
 
         assertNoShowLimitNotExceeded(userId, now);
+        assertNoConcurrentPendingPayment(userId);
         // 금액 한도 검증(AMOUNT_LIMIT_EXCEEDED/AMOUNT_BELOW_MINIMUM)은 기준 환율(Currency 도메인)이
         // 있어야 USD/VND 상당액을 계산할 수 있어 이번 범위에서 생략한다 — #26에서 연동 예정.
 
-        Branch branch = branchRepository.findById(request.branchId())
-                .orElseThrow(() -> new BusinessException(BusinessErrorCode.BRANCH_NOT_FOUND));
+        Reservation reservation = reservationHoldService.createHold(userId, request, now);
 
+        // Stripe PaymentIntent 생성 실패 시 이 예약은 결제 연결 없는 PENDING_PAYMENT로 남지만,
+        // 5분 결제 TTL이 지나면 expireOverduePendingPayments()가 재고/슬롯을 알아서 회수한다.
+        PaymentIntentResult intent = paymentService.createPaymentIntent(reservation);
+
+        // 결제 대기(PENDING_PAYMENT) 홀드 생성 알림 발송은 Notification 도메인이 없어 생략한다.
+        // QR은 결제 승인 전에는 발급하지 않는다 — PaymentService.handlePaymentSucceeded(웹훅)에서 발급한다.
+
+        Branch branch = getBranchOrThrow(reservation.getBranchId());
         BranchCurrencyRate rate = branchCurrencyRateRepository
-                .findForUpdate(branch.getId(), request.currencyCode())
-                .orElseThrow(() -> new BusinessException(BusinessErrorCode.STOCK_EXCEEDED));
-        rate.decreaseStock(request.amount());
-
-        LocalTime pickupTime = LocalTime.parse(request.pickupTime());
-        lockTimeSlot(branch, request.pickupDate(), pickupTime).decreaseRemaining();
-
-        Reservation reservation = Reservation.builder()
-                .userId(userId)
-                .branchId(branch.getId())
-                .currencyCode(request.currencyCode())
-                .amount(request.amount())
-                .pickupDate(request.pickupDate())
-                .pickupTime(pickupTime)
-                .now(now)
-                .build();
-        reservationRepository.save(reservation);
-
-        reservation.assignReservationNumber(generateReservationNumber(reservation.getId(), now));
-        reservation.issueQrToken(generateQrToken());
-
-        // 예약 완료 알림 발송은 Notification 도메인이 없어 생략한다.
-
-        return toDetail(reservation, branch, rate);
+                .findRate(branch.getId(), reservation.getCurrencyCode())
+                .orElse(null);
+        return toDetail(reservation, branch, rate, intent.clientSecret());
     }
 
     public ReservationPageResponse listMyReservations(Long userId, String statusFilter, Pageable pageable) {
@@ -170,14 +160,19 @@ public class ReservationService {
     }
 
     /**
-     * discussions#13에서 채택한 "방안 A(1 Row Locked)" — 슬롯 행을 없으면 만들고(ensureExists),
-     * 그 행에 비관적 락을 걸어 반환한다. 호출자는 반환된 행에서 곧바로 increase/decreaseRemaining을
-     * 호출해야 같은 트랜잭션 안에서 락이 유지된 채로 원자적으로 반영된다.
+     * discussion#16: 결제 TTL(5분)을 넘긴 유령 홀드(PENDING_PAYMENT)를 EXPIRED로 풀고 재고/슬롯을
+     * 복원한다. 노쇼 이력(autoExpired)과는 분리한다 — 결제까지 가지 않은 홀드는 노쇼가 아니다.
      */
-    private BranchTimeSlot lockTimeSlot(Branch branch, LocalDate pickupDate, LocalTime pickupTime) {
-        branchTimeSlotRepository.ensureExists(branch.getId(), pickupDate, pickupTime, branch.getTimeSlotCapacity());
-        return branchTimeSlotRepository.lockForUpdate(branch.getId(), pickupDate, pickupTime)
-                .orElseThrow(() -> new IllegalStateException("ensureExists 직후이므로 슬롯 행은 항상 존재해야 한다."));
+    @Transactional
+    public void expireOverduePendingPayments() {
+        LocalDateTime now = LocalDateTime.now();
+        List<Reservation> overdue = reservationRepository
+                .findExpiredPendingPayments(ReservationStatus.PENDING_PAYMENT, now);
+        for (Reservation reservation : overdue) {
+            reservation.expireHold();
+            restoreStock(reservation);
+            restoreTimeSlot(reservation);
+        }
     }
 
     private void restoreStock(Reservation reservation) {
@@ -226,6 +221,16 @@ public class ReservationService {
         }
     }
 
+    /**
+     * discussion#16 유령 홀드 완화책: 인증된 사용자당 동시 PENDING_PAYMENT 1건 제한.
+     */
+    private void assertNoConcurrentPendingPayment(Long userId) {
+        long pendingCount = reservationRepository.countByUserIdAndStatus(userId, ReservationStatus.PENDING_PAYMENT);
+        if (pendingCount > 0) {
+            throw new BusinessException(BusinessErrorCode.CONCURRENT_PENDING_PAYMENT_LIMIT);
+        }
+    }
+
     private void assertOwner(Reservation reservation, Long userId) {
         if (!reservation.getUserId().equals(userId)) {
             throw new BusinessException(BusinessErrorCode.FORBIDDEN);
@@ -250,11 +255,16 @@ public class ReservationService {
     }
 
     private ReservationDetailResponse toDetail(Reservation reservation, Branch branch, BranchCurrencyRate rate) {
+        return toDetail(reservation, branch, rate, null);
+    }
+
+    private ReservationDetailResponse toDetail(Reservation reservation, Branch branch, BranchCurrencyRate rate,
+                                                String paymentClientSecret) {
         Double preferentialRate = rate != null ? rate.getPreferentialRate() : null;
         boolean reservationAvailable = rate != null && rate.hasStock();
         BranchSummaryResponse branchSummary = BranchSummaryResponse.of(branch, null,
                 branch.isOpenNow(LocalDateTime.now()), preferentialRate, reservationAvailable);
-        return ReservationDetailResponse.of(reservation, branchSummary);
+        return ReservationDetailResponse.of(reservation, branchSummary, paymentClientSecret);
     }
 
     private List<ReservationStatus> parseStatuses(String statusFilter) {
@@ -267,16 +277,6 @@ public class ReservationService {
         } catch (IllegalArgumentException e) {
             throw new BusinessException(BusinessErrorCode.INVALID_INPUT_VALUE);
         }
-    }
-
-    private String generateReservationNumber(Long id, LocalDateTime now) {
-        return "TX-" + RESERVATION_NUMBER_DATE.format(now) + "-" + String.format("%04d", id % 10_000);
-    }
-
-    private String generateQrToken() {
-        byte[] bytes = new byte[24];
-        SECURE_RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private boolean constantTimeEquals(String a, String b) {

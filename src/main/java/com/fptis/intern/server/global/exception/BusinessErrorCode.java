@@ -73,6 +73,14 @@ public enum BusinessErrorCode implements ErrorCode {
     QR_EXPIRED(HttpStatus.CONFLICT, "C209", "QR 코드가 만료되었습니다."),
     QR_ALREADY_USED(HttpStatus.CONFLICT, "C210", "이미 사용되었거나 유효하지 않은 QR 코드입니다."),
     IDENTITY_MISMATCH(HttpStatus.CONFLICT, "C211", "신원 확인에 실패했습니다."),
+    RESERVATION_ALREADY_EXPIRED(HttpStatus.CONFLICT, "C212", "결제 대기 시간이 만료된 예약입니다."),
+
+    /*
+     * 유지훈 : C3xx (Payment)
+     */
+    PAYMENT_NOT_PENDING(HttpStatus.CONFLICT, "C301", "결제 대기 상태의 예약이 아닙니다."),
+    CONCURRENT_PENDING_PAYMENT_LIMIT(HttpStatus.FORBIDDEN, "C304", "이미 결제 대기 중인 예약이 있어 새로운 예약을 홀드할 수 없습니다."),
+    PAYMENT_INTENT_CREATE_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "C305", "결제 준비에 실패했습니다. 잠시 후 다시 예약해주세요."),
 
     /*
      * 409 CONFLICT: 리소스 충돌 (중복 데이터 등)

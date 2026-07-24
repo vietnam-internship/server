@@ -25,19 +25,66 @@ class ReservationTest {
     }
 
     @Test
-    void holdsStockForTwoHoursFromCreation() {
+    void holdsPaymentSlotForFiveMinutesFromCreation() {
         LocalDateTime now = LocalDateTime.of(2026, 7, 21, 10, 0);
         Reservation reservation = newReservation(now);
 
+        assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+        assertThat(reservation.getPaymentExpiresAt()).isEqualTo(now.plusMinutes(5));
+        assertThat(reservation.getExpiresAt()).isNull();
+        assertThat(reservation.isPaymentExpired(now.plusMinutes(5).minusSeconds(1))).isFalse();
+        assertThat(reservation.isPaymentExpired(now.plusMinutes(5).plusSeconds(1))).isTrue();
+    }
+
+    @Test
+    void confirmPaymentTransitionsToReservedAndStartsPickupWindow() {
+        LocalDateTime now = LocalDateTime.of(2026, 7, 21, 10, 0);
+        Reservation reservation = newReservation(now);
+
+        LocalDateTime confirmedAt = now.plusMinutes(1);
+        reservation.confirmPayment(confirmedAt);
+
         assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.RESERVED);
-        assertThat(reservation.getExpiresAt()).isEqualTo(now.plusHours(2));
-        assertThat(reservation.isExpired(now.plusHours(2).minusMinutes(1))).isFalse();
-        assertThat(reservation.isExpired(now.plusHours(2).plusMinutes(1))).isTrue();
+        assertThat(reservation.getExpiresAt()).isEqualTo(confirmedAt.plusHours(2));
+        assertThat(reservation.isExpired(confirmedAt.plusHours(2).minusMinutes(1))).isFalse();
+        assertThat(reservation.isExpired(confirmedAt.plusHours(2).plusMinutes(1))).isTrue();
+    }
+
+    @Test
+    void confirmPaymentTwiceThrowsPaymentNotPending() {
+        Reservation reservation = newReservation(LocalDateTime.now());
+        reservation.confirmPayment(LocalDateTime.now());
+
+        assertThatThrownBy(() -> reservation.confirmPayment(LocalDateTime.now()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BusinessErrorCode.PAYMENT_NOT_PENDING);
+    }
+
+    @Test
+    void expireHoldTransitionsToExpired() {
+        Reservation reservation = newReservation(LocalDateTime.now());
+
+        reservation.expireHold();
+
+        assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.EXPIRED);
+    }
+
+    @Test
+    void expireHoldAfterConfirmThrowsPaymentNotPending() {
+        Reservation reservation = newReservation(LocalDateTime.now());
+        reservation.confirmPayment(LocalDateTime.now());
+
+        assertThatThrownBy(reservation::expireHold)
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BusinessErrorCode.PAYMENT_NOT_PENDING);
     }
 
     @Test
     void cancelClearsQrTokenAndMarksAutoExpiredWhenRequested() {
         Reservation reservation = newReservation(LocalDateTime.now());
+        reservation.confirmPayment(LocalDateTime.now());
         reservation.issueQrToken("raw-token");
 
         reservation.cancel(true);
@@ -61,6 +108,7 @@ class ReservationTest {
     @Test
     void cancelAfterCompleteThrowsAlreadyCompleted() {
         Reservation reservation = newReservation(LocalDateTime.now());
+        reservation.confirmPayment(LocalDateTime.now());
         reservation.complete(LocalDateTime.now());
 
         assertThatThrownBy(() -> reservation.cancel(false))
@@ -70,8 +118,20 @@ class ReservationTest {
     }
 
     @Test
+    void cancelAfterExpiredThrowsReservationAlreadyExpired() {
+        Reservation reservation = newReservation(LocalDateTime.now());
+        reservation.expireHold();
+
+        assertThatThrownBy(() -> reservation.cancel(false))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BusinessErrorCode.RESERVATION_ALREADY_EXPIRED);
+    }
+
+    @Test
     void completeClearsQrToken() {
         Reservation reservation = newReservation(LocalDateTime.now());
+        reservation.confirmPayment(LocalDateTime.now());
         reservation.issueQrToken("raw-token");
         LocalDateTime pickedUpAt = LocalDateTime.now();
 
