@@ -60,6 +60,10 @@ public class User extends BaseTimeEntity {
         this.phoneVerified = false;
     }
 
+    public void markPhoneVerified() {
+        this.phoneVerified = true;
+    }
+
     public void linkGoogleId(String googleId) {
         this.googleId = googleId;
     }
