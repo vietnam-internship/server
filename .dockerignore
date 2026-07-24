@@ -1,6 +1,7 @@
 .git
 .gradle
-build/
+build/*
+!build/libs/
 .idea
 *.iml
 k8s/
