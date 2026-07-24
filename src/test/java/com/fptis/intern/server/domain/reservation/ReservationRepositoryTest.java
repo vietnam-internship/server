@@ -73,7 +73,6 @@ class ReservationRepositoryTest {
                 .now(now)
                 .build());
         reservation.assignReservationNumber("TX-20260721-0001");
-        reservation.issueQrToken("raw-qr-token");
         reservationRepository.save(reservation);
 
         assertThat(reservationRepository.findMyReservations(user.getId(), PageRequest.of(0, 20)).getContent())
@@ -81,10 +80,23 @@ class ReservationRepositoryTest {
                 .containsExactly("TX-20260721-0001");
 
         assertThat(reservationRepository.findMyReservationsByStatus(
-                user.getId(), List.of(ReservationStatus.RESERVED), PageRequest.of(0, 20)).getContent())
+                user.getId(), List.of(ReservationStatus.PENDING_PAYMENT), PageRequest.of(0, 20)).getContent())
                 .hasSize(1);
+
+        assertThat(reservationRepository.countByUserIdAndStatus(user.getId(), ReservationStatus.PENDING_PAYMENT))
+                .isEqualTo(1);
 
         assertThat(reservationRepository.findExpiredReservations(ReservationStatus.RESERVED, now.minusHours(3)))
                 .isEmpty();
+        assertThat(reservationRepository.findExpiredPendingPayments(ReservationStatus.PENDING_PAYMENT, now.minusMinutes(10)))
+                .isEmpty();
+
+        reservation.confirmPayment(now);
+        reservation.issueQrToken("raw-qr-token");
+        reservationRepository.save(reservation);
+
+        assertThat(reservationRepository.findMyReservationsByStatus(
+                user.getId(), List.of(ReservationStatus.RESERVED), PageRequest.of(0, 20)).getContent())
+                .hasSize(1);
     }
 }

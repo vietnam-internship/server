@@ -552,18 +552,26 @@ paths:
       operationId: createReservation
       summary: 환전 예약 생성
       description: |
-        통화·금액·지점·픽업 일시로 예약을 생성합니다. (PRD §8 Reservation)
+        통화·금액·지점·픽업 일시로 **결제 전 홀드**를 생성합니다. (PRD §8 Reservation,
+        discussion#16 방안 2: Hold→Pay 분리)
 
         검증 순서:
         1. 휴대폰 인증 여부 (`403 PHONE_NOT_VERIFIED`)
         2. 노쇼 제한 — 최근 30일 노쇼 1회 시 동시 예약 1건 제한, 누적 3회 시 7일 차단 (`403 NO_SHOW_LIMIT`)
-        3. 금액 한도 — USD 10,000 상당액 이상 차단(`400 AMOUNT_LIMIT_EXCEEDED`),
+        3. 동시 결제 대기 제한 — 사용자당 `PENDING_PAYMENT` 1건까지만 허용 (`403 CONCURRENT_PENDING_PAYMENT_LIMIT`)
+        4. 금액 한도 — USD 10,000 상당액 이상 차단(`400 AMOUNT_LIMIT_EXCEEDED`),
            10,000 VND 상당액 미만 차단(`400 AMOUNT_BELOW_MINIMUM`)
-        4. 예약 전용 재고 확인 (`409 STOCK_EXCEEDED`) — 트랜잭션/락으로 동시 예약 초과 판매 방지 (PRD §10)
-        5. 30분 픽업 슬롯 정원 확인 (`409 TIME_SLOT_FULL`)
+        5. 예약 전용 재고 확인 (`409 STOCK_EXCEEDED`) — 트랜잭션/락으로 동시 예약 초과 판매 방지 (PRD §10)
+        6. 30분 픽업 슬롯 정원 확인 (`409 TIME_SLOT_FULL`)
 
-        성공 시 **현재 환율을 고정(lockedRate)**하고 재고를 **2시간 홀드**합니다.
-        만료 시 재고는 자동으로 워크인 재고로 반환됩니다. (PRD §19.1)
+        성공 시 재고/슬롯을 즉시 홀드하고, 같은 요청 안에서 Stripe PaymentIntent를 생성해
+        `paymentClientSecret`을 함께 내려줍니다. 클라이언트는 이 값으로 Stripe.js/Elements를 띄워
+        `paymentExpiresAt`(5분) 안에 결제를 완료해야 합니다 — 이 시점엔 아직 결제가 승인되지
+        않았으므로 **QR은 발급되지 않습니다**. 결제 승인 여부는 클라이언트가 아니라 Stripe
+        웹훅(`payment_intent.succeeded`)으로만 확정되며, 승인되면 서버가 예약을 `RESERVED`로
+        전환하고 QR을 발급합니다. TTL 안에 승인받지 못하면 홀드는 `EXPIRED`로 풀리고 재고/슬롯이
+        자동 반환됩니다. `paymentClientSecret`은 이 응답에서만 내려가며 이후 조회 응답에는
+        포함되지 않습니다(서버에 저장하지 않음).
       requestBody:
         required: true
         content:
@@ -572,7 +580,7 @@ paths:
               $ref: '#/components/schemas/ReservationCreateRequest'
       responses:
         '201':
-          description: 예약 생성 완료 (환율·통화 확보, 예약 완료 알림 발송)
+          description: 결제 대기 홀드 생성 완료 (재고/슬롯 확보, PENDING_PAYMENT)
           content:
             application/json:
               schema:
@@ -586,7 +594,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: 'PHONE_NOT_VERIFIED / NO_SHOW_LIMIT'
+          description: 'PHONE_NOT_VERIFIED / NO_SHOW_LIMIT / CONCURRENT_PENDING_PAYMENT_LIMIT'
           content:
             application/json:
               schema:
@@ -602,9 +610,10 @@ paths:
       operationId: listMyReservations
       summary: 내 예약 목록 조회
       description: |
-        내 예약을 상태별로 필터링해 조회합니다. UI 라벨 매핑: `RESERVED` → "Upcoming",
-        `COMPLETED` → "Completed", `CANCELLED` → "Cancelled". (PRD §12 ReservationStatus)
-        환전 내역 화면(Exchange History)은 `status=COMPLETED,CANCELLED`로 조회합니다.
+        내 예약을 상태별로 필터링해 조회합니다. UI 라벨 매핑: `PENDING_PAYMENT` → "Pending",
+        `RESERVED` → "Upcoming", `COMPLETED` → "Completed", `CANCELLED` → "Cancelled",
+        `EXPIRED` → "Expired". (PRD §12 ReservationStatus, discussion#16)
+        환전 내역 화면(Exchange History)은 `status=COMPLETED,CANCELLED,EXPIRED`로 조회합니다.
       parameters:
         - name: status
           in: query
@@ -632,7 +641,8 @@ paths:
       summary: 예약 상세 조회 (QR 포함)
       description: |
         예약 상세를 반환합니다. `RESERVED` 상태일 때만 일회용 QR 페이로드(`qrPayload`)가
-        포함되며, 완료/취소된 예약에서는 `null`입니다. (PRD §24 Reservation Detail)
+        포함되며, 결제 대기 중에는 `paymentExpiresAt`(결제 TTL)이, 그 외 상태에서는 `null`입니다.
+        (PRD §24 Reservation Detail, discussion#16)
         확정 금액은 예약 시점에 고정된 `lockedRate`로 계산됩니다.
       parameters:
         - $ref: '#/components/parameters/ReservationId'
@@ -677,7 +687,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 'ALREADY_CANCELLED / ALREADY_COMPLETED — 취소 불가 상태'
+          description: 'ALREADY_CANCELLED / ALREADY_COMPLETED / RESERVATION_ALREADY_EXPIRED — 취소 불가 상태'
           content:
             application/json:
               schema:
@@ -1685,8 +1695,12 @@ components:
     # ---------- Reservation ----------
     ReservationStatus:
       type: string
-      enum: [RESERVED, COMPLETED, CANCELLED]
-      description: 'UI 라벨: RESERVED=Upcoming, COMPLETED=Completed, CANCELLED=Cancelled'
+      enum: [PENDING_PAYMENT, RESERVED, COMPLETED, CANCELLED, EXPIRED]
+      description: |
+        UI 라벨: PENDING_PAYMENT=Pending, RESERVED=Upcoming, COMPLETED=Completed,
+        CANCELLED=Cancelled, EXPIRED=Expired.
+        discussion#16(방안 2) 상태 전이: PENDING_PAYMENT -(결제 승인)-> RESERVED -(픽업)-> COMPLETED,
+        PENDING_PAYMENT -(결제 TTL 만료)-> EXPIRED, RESERVED -(사용자 취소 | 픽업 TTL 만료)-> CANCELLED.
 
     ReservationCreateRequest:
       type: object
@@ -1748,11 +1762,16 @@ components:
           format: double
           description: 예약 시점에 고정된 환율 (확정 금액 계산 기준, PRD §12)
           example: 1384.3
+        paymentExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 결제 대기 TTL = 홀드 시각 + 5분 (PENDING_PAYMENT 상태에만, discussion#16)
         expiresAt:
           type: string
           format: date-time
           nullable: true
-          description: 재고 홀드 만료 시각 = 예약 시각 + 2시간 (RESERVED 상태에만, PRD §19.1)
+          description: 픽업 마감 시각 = 결제 승인 시각 + 2시간 (RESERVED 상태에만, PRD §19.1)
         createdAt:
           type: string
           format: date-time
@@ -1783,6 +1802,13 @@ components:
               description: 직원 QR 검증으로 픽업 완료된 시각
             branch:
               $ref: '#/components/schemas/BranchSummary'
+            paymentClientSecret:
+              type: string
+              nullable: true
+              description: |
+                Stripe PaymentIntent의 client_secret — 예약 생성(`POST /reservations`) 응답에서만
+                내려간다. Stripe.js/Elements로 결제창을 띄우는 데 쓰이며 서버 DB에는 저장하지 않으므로
+                다른 조회 응답(GET /reservations, GET /reservations/{id} 등)에서는 항상 null이다.
 
     ReservationPage:
       type: object
