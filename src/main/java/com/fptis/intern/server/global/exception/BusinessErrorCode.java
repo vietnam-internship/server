@@ -16,6 +16,25 @@ public enum BusinessErrorCode implements ErrorCode {
      * xx부분 01부터 순차적으로 작성
      */
 
+    /*
+     * [김두현 C1xx] 400 BAD_REQUEST: 잘못된 요청 (논리 오류)
+     */
+    INVALID_DATE_RANGE(HttpStatus.BAD_REQUEST, "C104", "시작일이 종료일보다 늦을 수 없습니다."),
+
+    /*
+     * [김두현 C1xx] 403 FORBIDDEN: 권한 없음 (BOLA)
+     */
+    NOT_YOUR_BRANCH(HttpStatus.FORBIDDEN, "C101", "본인이 소속된 지점의 데이터만 접근할 수 있습니다."),
+
+    /*
+     * [김두현 C1xx] 404 NOT_FOUND: 리소스 찾을 수 없음
+     */
+    CURRENCY_NOT_FOUND(HttpStatus.NOT_FOUND, "C102", "존재하지 않는 통화 코드입니다."),
+    SIGNAL_NOT_FOUND(HttpStatus.NOT_FOUND, "C103", "매핑하려는 시그널 정보를 찾을 수 없습니다."),
+
+    /*
+     * [김두현 C1xx] 409 CONFLICT: 리소스 충돌
+     */
 
     /*
      * 400 BAD_REQUEST: 잘못된 요청
@@ -46,7 +65,6 @@ public enum BusinessErrorCode implements ErrorCode {
      * 이견희 : C2xx (Reservation)
      */
     RESERVATION_NOT_FOUND(HttpStatus.NOT_FOUND, "C202", "존재하지 않는 예약입니다."),
-    PHONE_NOT_VERIFIED(HttpStatus.FORBIDDEN, "C203", "휴대폰 인증이 필요합니다."),
     NO_SHOW_LIMIT(HttpStatus.FORBIDDEN, "C204", "노쇼 이력으로 인해 예약이 제한됩니다."),
     STOCK_EXCEEDED(HttpStatus.CONFLICT, "C205", "예약 전용 재고가 부족합니다."),
     TIME_SLOT_FULL(HttpStatus.CONFLICT, "C206", "선택한 픽업 시간대의 예약 정원이 가득 찼습니다."),

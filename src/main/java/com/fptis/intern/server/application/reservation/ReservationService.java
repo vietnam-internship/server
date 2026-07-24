@@ -9,7 +9,6 @@ import com.fptis.intern.server.domain.branch.BranchTimeSlotRepository;
 import com.fptis.intern.server.domain.reservation.Reservation;
 import com.fptis.intern.server.domain.reservation.ReservationRepository;
 import com.fptis.intern.server.domain.reservation.ReservationStatus;
-import com.fptis.intern.server.domain.user.User;
 import com.fptis.intern.server.domain.user.UserRepository;
 import com.fptis.intern.server.global.exception.BusinessErrorCode;
 import com.fptis.intern.server.global.exception.BusinessException;
@@ -53,13 +52,10 @@ public class ReservationService {
 
     @Transactional
     public ReservationDetailResponse createReservation(Long userId, ReservationCreateRequest request) {
-        User user = userRepository.findById(userId)
+        userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.UNAUTHORIZED));
         LocalDateTime now = LocalDateTime.now();
 
-        if (!user.isPhoneVerified()) {
-            throw new BusinessException(BusinessErrorCode.PHONE_NOT_VERIFIED);
-        }
         assertNoShowLimitNotExceeded(userId, now);
         // 금액 한도 검증(AMOUNT_LIMIT_EXCEEDED/AMOUNT_BELOW_MINIMUM)은 기준 환율(Currency 도메인)이
         // 있어야 USD/VND 상당액을 계산할 수 있어 이번 범위에서 생략한다 — #26에서 연동 예정.
@@ -135,9 +131,9 @@ public class ReservationService {
 
         LocalDateTime now = LocalDateTime.now();
         if (reservation.isExpired(now)) {
-            reservation.cancel(true);
-            restoreStock(reservation);
-            restoreTimeSlot(reservation);
+            // 여기서 취소/재고·슬롯 복원까지 하면, 뒤이은 QR_EXPIRED 예외(unchecked)가
+            // 트랜잭션 전체를 롤백시켜 방금 한 복원 작업까지 함께 사라진다.
+            // 실제 정리는 expireOverdueReservations() 스윕러가 전담하고, 여기서는 만료 여부만 판단해 응답한다.
             throw new BusinessException(BusinessErrorCode.QR_EXPIRED);
         }
         if (reservation.getStatus() == ReservationStatus.COMPLETED) {
@@ -213,8 +209,18 @@ public class ReservationService {
                 throw new BusinessException(BusinessErrorCode.NO_SHOW_LIMIT);
             }
         } else if (noShowCount >= 1) {
-            long activeCount = reservationRepository.countActiveReservations(userId, ReservationStatus.RESERVED, now);
-            if (activeCount >= 1) {
+            // 활성 예약 수를 세는 시점과 예약을 생성하는 시점 사이의 레이스를 막기 위해,
+            // 카운트를 읽기 전 유저 행에 락을 걸어 같은 유저의 동시 요청을 직렬화한다.
+            // 이 락은 트랜잭션이 끝날 때까지 유지되므로, 뒤이은 재고/슬롯 락(findForUpdate/lockForUpdate)과의
+            // 데드락을 피하려면 항상 유저 락을 먼저 잡아야 한다.
+            userRepository.findForUpdate(userId)
+                    .orElseThrow(() -> new BusinessException(BusinessErrorCode.UNAUTHORIZED));
+            // MySQL REPEATABLE READ에서 일반 SELECT는 유저 락 대기 전 스냅샷을 읽어 방금 커밋된
+            // 예약을 놓칠 수 있어, 최신 커밋 데이터를 보장하는 락 획득 읽기로 확인한다.
+            boolean hasActiveReservation = !reservationRepository
+                    .findActiveReservationsForUpdate(userId, ReservationStatus.RESERVED, now)
+                    .isEmpty();
+            if (hasActiveReservation) {
                 throw new BusinessException(BusinessErrorCode.NO_SHOW_LIMIT);
             }
         }
