@@ -33,4 +33,15 @@ public class BranchController {
     public ApiResponse<?> getBranch(@PathVariable Long id) {
         return ApiResponse.success(branchService.getBranch(id));
     }
+
+    @PublicApi
+    @GetMapping("/recommend")
+    public ApiResponse<?> recommendBranches(
+            @RequestParam double latitude,
+            @RequestParam double longitude,
+            @RequestParam String currency,
+            @RequestParam(name = "radius_km", defaultValue = "5") double radiusKm,
+            @RequestParam(name = "top_n", defaultValue = "10") int topN) {
+        return ApiResponse.success(branchService.recommendBranches(latitude, longitude, currency, radiusKm, topN));
+    }
 }
