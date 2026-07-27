@@ -4,10 +4,14 @@ travelx:
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   dev:
     auth:
-      enabled: ${DEV_AUTH_ENABLED:false}
+      enabled: ${DEV_AUTH_ENABLED:true}
       cookie-same-site: ${AUTH_COOKIE_SAME_SITE:None}
   oauth:
     google:
       client-id: ${GOOGLE_CLIENT_ID}
       client-secret: ${GOOGLE_CLIENT_SECRET}
       redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:5173/auth/callback}
+  payment:
+    stripe:
+      secret-key: ${STRIPE_SECRET_KEY}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET}

@@ -19,15 +19,18 @@ public record ReservationSummaryResponse(
         String pickupTime,
         ReservationStatus status,
         Double lockedRate,
+        LocalDateTime paymentExpiresAt,
         LocalDateTime expiresAt,
         LocalDateTime createdAt
 ) {
 
     public static ReservationSummaryResponse of(Reservation reservation, String branchName) {
+        boolean isPendingPayment = reservation.getStatus() == ReservationStatus.PENDING_PAYMENT;
+        LocalDateTime paymentExpiresAt = isPendingPayment ? reservation.getPaymentExpiresAt() : null;
         LocalDateTime expiresAt = reservation.getStatus() == ReservationStatus.RESERVED ? reservation.getExpiresAt() : null;
         return new ReservationSummaryResponse(reservation.getId(), reservation.getReservationNumber(),
                 reservation.getCurrencyCode(), reservation.getAmount(), reservation.getBranchId(), branchName,
                 reservation.getPickupDate(), reservation.getPickupTime().toString(), reservation.getStatus(),
-                reservation.getLockedRate(), expiresAt, reservation.getCreatedAt());
+                reservation.getLockedRate(), paymentExpiresAt, expiresAt, reservation.getCreatedAt());
     }
 }
