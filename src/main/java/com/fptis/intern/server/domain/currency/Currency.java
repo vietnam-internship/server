@@ -46,4 +46,11 @@ public class Currency extends BaseTimeEntity {
         this.buyRate = buyRate;
         this.sellRate = sellRate;
     }
+
+    /**
+     * preferentialRate는 백분율 숫자다(예: 0.5 = 0.5%) — 지점이 매도 환율에서 이 비율만큼 할인해 판매한다.
+     */
+    public double calculateFinalRate(double preferentialRate) {
+        return sellRate * (1 - preferentialRate / 100);
+    }
 }

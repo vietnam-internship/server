@@ -8,6 +8,7 @@ import com.fptis.intern.server.domain.branch.BranchCurrencyRateRepository;
 import com.fptis.intern.server.domain.branch.BranchRepository;
 import com.fptis.intern.server.domain.branch.BranchTimeSlot;
 import com.fptis.intern.server.domain.branch.BranchTimeSlotRepository;
+import com.fptis.intern.server.domain.currency.CurrencyRepository;
 import com.fptis.intern.server.domain.reservation.Reservation;
 import com.fptis.intern.server.domain.reservation.ReservationRepository;
 import com.fptis.intern.server.domain.reservation.ReservationStatus;
@@ -45,6 +46,7 @@ public class ReservationService {
     private final BranchTimeSlotRepository branchTimeSlotRepository;
     private final ReservationHoldService reservationHoldService;
     private final PaymentService paymentService;
+    private final CurrencyRepository currencyRepository;
 
     /**
      * 이 메서드 자체는 직접 쓰기를 하지 않지만, 클래스 기본값(readOnly=true)을 그대로 두면
@@ -262,8 +264,13 @@ public class ReservationService {
                                                 String paymentClientSecret) {
         Double preferentialRate = rate != null ? rate.getPreferentialRate() : null;
         boolean reservationAvailable = rate != null && rate.hasStock();
+        Double finalRate = rate != null
+                ? currencyRepository.findByCode(reservation.getCurrencyCode())
+                        .map(currency -> currency.calculateFinalRate(rate.getPreferentialRate()))
+                        .orElse(null)
+                : null;
         BranchSummaryResponse branchSummary = BranchSummaryResponse.of(branch, null,
-                branch.isOpenNow(LocalDateTime.now()), preferentialRate, reservationAvailable);
+                branch.isOpenNow(LocalDateTime.now()), preferentialRate, finalRate, reservationAvailable);
         return ReservationDetailResponse.of(reservation, branchSummary, paymentClientSecret);
     }
 
