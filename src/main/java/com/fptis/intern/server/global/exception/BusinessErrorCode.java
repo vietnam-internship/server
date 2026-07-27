@@ -74,6 +74,8 @@ public enum BusinessErrorCode implements ErrorCode {
     QR_EXPIRED(HttpStatus.CONFLICT, "C209", "QR 코드가 만료되었습니다."),
     QR_ALREADY_USED(HttpStatus.CONFLICT, "C210", "이미 사용되었거나 유효하지 않은 QR 코드입니다."),
     IDENTITY_MISMATCH(HttpStatus.CONFLICT, "C211", "신원 확인에 실패했습니다."),
+    AMOUNT_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "C212", "USD 10,000 상당액 이상은 예약할 수 없습니다."),
+    AMOUNT_BELOW_MINIMUM(HttpStatus.BAD_REQUEST, "C213", "최소 환전 금액(10,000 VND 상당액) 미만입니다."),
 
     /*
      * 409 CONFLICT: 리소스 충돌 (중복 데이터 등)

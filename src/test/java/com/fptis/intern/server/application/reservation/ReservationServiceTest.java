@@ -9,6 +9,8 @@ import com.fptis.intern.server.domain.branch.BranchCurrencyRateRepository;
 import com.fptis.intern.server.domain.branch.BranchRepository;
 import com.fptis.intern.server.domain.branch.BranchTimeSlot;
 import com.fptis.intern.server.domain.branch.BranchTimeSlotRepository;
+import com.fptis.intern.server.domain.currency.Currency;
+import com.fptis.intern.server.domain.currency.CurrencyRepository;
 import com.fptis.intern.server.domain.reservation.Reservation;
 import com.fptis.intern.server.domain.reservation.ReservationRepository;
 import com.fptis.intern.server.domain.reservation.ReservationStatus;
@@ -79,6 +81,8 @@ class ReservationServiceTest {
     @Autowired
     private BranchTimeSlotRepository branchTimeSlotRepository;
     @Autowired
+    private CurrencyRepository currencyRepository;
+    @Autowired
     private ReservationService reservationService;
 
     private User verifiedUser;
@@ -108,6 +112,13 @@ class ReservationServiceTest {
                 .preferentialRate(0.5)
                 .reservationOnlyStock(1000)
                 .build());
+
+        currencyRepository.save(Currency.builder()
+                .code("USD")
+                .country("미국")
+                .buyRate(1370.0)
+                .sellRate(1400.0)
+                .build());
     }
 
     private ReservationCreateRequest createRequest(LocalDate pickupDate, String pickupTime) {
@@ -126,6 +137,9 @@ class ReservationServiceTest {
         assertThat(response.status()).isEqualTo(ReservationStatus.RESERVED);
         assertThat(response.qrPayload()).isNotBlank();
         assertThat(response.reservationNumber()).startsWith("TX-");
+        // preferentialRate 0.5, sellRate 1400 -> finalRate = 1400 * (1 - 0.005) = 1393.0
+        assertThat(response.lockedRate()).isEqualTo(1393.0);
+        assertThat(response.amountFrom()).isEqualTo(500 * 1393.0);
 
         BranchCurrencyRate rate = branchCurrencyRateRepository
                 .findRate(branch.getId(), "USD").orElseThrow();
@@ -139,6 +153,32 @@ class ReservationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(BusinessErrorCode.STOCK_EXCEEDED);
+    }
+
+    @Test
+    void rejectsWhenAmountReachesUsdLimit() {
+        // sellRate 1400 * 10,000 USD = 14,000,000 KRW, 요청 통화도 USD라 amountKrw와 같은 기준
+        assertThatThrownBy(() -> reservationService.createReservation(
+                verifiedUser.getId(), createRequest(LocalDate.now().plusDays(1), "10:30", 10_000)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BusinessErrorCode.AMOUNT_LIMIT_EXCEEDED);
+    }
+
+    @Test
+    void rejectsWhenAmountBelowVndMinimum() {
+        currencyRepository.save(Currency.builder()
+                .code("VND")
+                .country("베트남")
+                .buyRate(0.053)
+                .sellRate(0.055)
+                .build());
+        // VND 10,000 * 0.055 = 550 KRW 미만이어야 하므로, USD 0.1 * 1400 = 140 KRW로 요청한다.
+        assertThatThrownBy(() -> reservationService.createReservation(
+                verifiedUser.getId(), createRequest(LocalDate.now().plusDays(1), "10:30", 0.1)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BusinessErrorCode.AMOUNT_BELOW_MINIMUM);
     }
 
     @Test
@@ -352,6 +392,7 @@ class ReservationServiceTest {
         branchCurrencyRateRepository.deleteAll();
         branchRepository.deleteAll();
         userRepository.deleteAll();
+        currencyRepository.deleteAll();
     }
 
     @Test

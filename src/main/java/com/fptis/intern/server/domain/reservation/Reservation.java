@@ -20,7 +20,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * lockedRate(예약 시점 고정 환율)는 기준 환율(Currency 도메인)이 없어 항상 null이다 — #26에서 연동 예정.
  * qrToken은 상세 재조회(GET /reservations/{id})에서도 다시 내려줘야 해서 RefreshToken처럼
  * 해시만 저장할 수 없고 평문으로 저장한다 — 대신 상태 전이 시 즉시 null로 지워 재사용을 막는다.
  */
@@ -101,6 +100,14 @@ public class Reservation extends BaseTimeEntity {
 
     public void issueQrToken(String qrToken) {
         this.qrToken = qrToken;
+    }
+
+    /**
+     * 예약 시점의 지점별 최종 환율(BranchCurrencyRate.finalRate)을 고정한다 — 이후 우대율/기준 환율이
+     * 바뀌어도 이 예약의 확정 금액(amountFrom) 계산은 이 값 그대로 유지된다.
+     */
+    public void assignLockedRate(double lockedRate) {
+        this.lockedRate = lockedRate;
     }
 
     public boolean isExpired(LocalDateTime now) {
