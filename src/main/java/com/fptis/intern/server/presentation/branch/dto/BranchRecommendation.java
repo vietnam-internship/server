@@ -9,6 +9,7 @@ public record BranchRecommendation(
         String address,
         double latitude,
         double longitude,
+        int ranking,
         Double distanceKm,
         boolean isOpenNow,
         Double finalRate,
@@ -19,11 +20,14 @@ public record BranchRecommendation(
         boolean isBestRateNearby
 ) {
 
-    public static BranchRecommendation of(Branch branch, double distanceKm, Double preferentialRate,
+    public static BranchRecommendation of(Branch branch, int ranking, double distanceKm, Double preferentialRate,
                                            Double finalRate, boolean reservationAvailable, double totalScore,
                                            ScoreBreakdown breakdown, boolean isBestRateNearby) {
-        return new BranchRecommendation(branch.getId(), branch.getName(), branch.getAddress(),
-                branch.getLatitude(), branch.getLongitude(), distanceKm, branch.isOpenNow(LocalDateTime.now()),
-                finalRate, preferentialRate, reservationAvailable, totalScore, breakdown, isBestRateNearby);
+        return new BranchRecommendation(
+                branch.getId(), branch.getName(), branch.getAddress(),
+                branch.getLatitude(), branch.getLongitude(),
+                ranking, distanceKm, branch.isOpenNow(LocalDateTime.now()),
+                finalRate, preferentialRate, reservationAvailable,
+                totalScore, breakdown, isBestRateNearby);
     }
 }
