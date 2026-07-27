@@ -7,6 +7,10 @@ import com.fptis.intern.server.global.exception.ApiResponse;
 import com.fptis.intern.server.presentation.branch.dto.BranchCreateRequest;
 import com.fptis.intern.server.presentation.branch.dto.BranchRateUpdateRequest;
 import com.fptis.intern.server.presentation.branch.dto.BranchUpdateRequest;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -23,6 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
+@Tag(name = "Branch Admin", description = "지점 관리자용 API (ADMIN / BRANCH_ADMIN 권한 필요)")
+@SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/admin/branches")
 @RequiredArgsConstructor
@@ -36,6 +42,7 @@ public class BranchAdminController {
         return 1L; // 임시 하드코딩
     }
 
+    @Operation(summary = "지점 등록", description = "새 지점을 등록합니다. ADMIN 권한이 필요합니다.")
     @RequireAuth(roles = "ADMIN")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping
@@ -43,25 +50,28 @@ public class BranchAdminController {
         return ApiResponse.success(branchService.createBranch(request));
     }
 
+    @Operation(summary = "지점 정보 수정", description = "지점 정보를 부분 수정합니다. null이 아닌 필드만 반영됩니다. ADMIN 권한이 필요합니다.")
     @RequireAuth(roles = "ADMIN")
     @PatchMapping("/{id}")
-    public ApiResponse<?> updateBranch(@PathVariable Long id, @RequestBody BranchUpdateRequest request) {
+    public ApiResponse<?> updateBranch(@Parameter(description = "지점 ID") @PathVariable Long id, @RequestBody BranchUpdateRequest request) {
         return ApiResponse.success(branchService.updateBranch(id, request));
     }
 
     // PR #40 반영: 지점 직원이 우대율을 설정할 수 있도록 BRANCH_ADMIN 권한 추가
+    @Operation(summary = "지점 통화별 우대율 수정", description = "지점의 특정 통화에 대한 우대율/예약 전용 재고를 수정합니다. BRANCH_ADMIN 또는 ADMIN 권한이 필요합니다.")
     @RequireAuth(roles = {"BRANCH_ADMIN", "ADMIN"})
     @PatchMapping("/{id}/rate")
-    public ApiResponse<?> updateBranchRate(@PathVariable Long id, @Valid @RequestBody BranchRateUpdateRequest request) {
+    public ApiResponse<?> updateBranchRate(@Parameter(description = "지점 ID") @PathVariable Long id, @Valid @RequestBody BranchRateUpdateRequest request) {
         return ApiResponse.success(branchService.updateBranchRate(id, request));
     }
 
+    @Operation(summary = "지점 예약 목록 조회", description = "지점의 특정 날짜 예약 목록을 조회합니다. BRANCH_ADMIN 또는 ADMIN 권한이 필요합니다.")
     @RequireAuth(roles = {"BRANCH_ADMIN", "ADMIN"})
     @GetMapping("/{id}/reservations")
     public ApiResponse<?> getReservations(
-            @PathVariable Long id,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        
+            @Parameter(description = "지점 ID") @PathVariable Long id,
+            @Parameter(description = "조회할 예약 날짜 (yyyy-MM-dd)") @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
         Long tokenBranchId = extractTokenBranchId();
         return ApiResponse.success(branchAdminService.getReservations(id, tokenBranchId, date));
     }
