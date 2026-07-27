@@ -1,10 +1,11 @@
 package com.fptis.intern.server.presentation.branch.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 public record BranchRateUpdateRequest(
-        @NotBlank String currencyCode,
-        Double preferentialRate,
-        Double reservationOnlyStock
+        @Schema(description = "통화 코드 (예: USD)") @NotBlank String currencyCode,
+        @Schema(description = "우대율") Double preferentialRate,
+        @Schema(description = "예약 전용 재고") Double reservationOnlyStock
 ) {
 }
