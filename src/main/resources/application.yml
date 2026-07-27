@@ -73,6 +73,10 @@ logging:
 travelx:
   ai:
     server-url: ${AI_SERVER_URL:http://localhost:8081}
+  exchange-rate:
+    key: ${EXCHANGERATE_API_KEY}
+    url: ${EXCHANGERATE_API_URL}
+
 
 springdoc:
   packages-to-scan: com.fptis.intern.server
