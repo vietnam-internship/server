@@ -160,6 +160,38 @@ datetime updated_at
         datetime updated_at
     }
 
+    BRANCH_RECOMMENDATIONS {
+        bigint id PK
+        bigint user_id FK
+        varchar status
+        varchar currency
+        decimal amount
+        decimal latitude
+        decimal longitude
+        double radius_km
+        datetime created_at
+        datetime updated_at
+    }
+
+    BRANCH_RECOMMENDATION_ITEMS {
+        bigint id PK
+        bigint recommendation_id FK
+        bigint branch_id FK
+        int ranking
+        decimal score
+        decimal distance_score
+        decimal rate_score
+        decimal availability_score
+        decimal reservation_score
+        datetime created_at
+    }
+
+    BRANCH_RECOMMENDATION_CLICKS {
+        bigint id PK
+        bigint recommendation_item_id FK
+        datetime clicked_at
+    }
+
     BRANCH ||--o{ BRANCH_OPERATING_HOURS : "has"
     BRANCH ||--o{ BRANCH_TIME_SLOT_CONFIG : "has"
     BRANCH ||--o{ BRANCH_TIME_SLOT : "has"
@@ -175,3 +207,7 @@ datetime updated_at
     RECOMMENDATION_SIGNAL ||--o{ AI_RECOMMENDATION_SIGNAL : "has"
     CURRENCY ||--o{ EXCHANGE_RATE_HISTORY : "has"
     CURRENCY ||--o{ BACKTEST_RESULT : "has"
+    USER ||--o{ BRANCH_RECOMMENDATIONS : "has"
+    BRANCH_RECOMMENDATIONS ||--o{ BRANCH_RECOMMENDATION_ITEMS : "has"
+    BRANCH ||--o{ BRANCH_RECOMMENDATION_ITEMS : "is_recommended_in"
+    BRANCH_RECOMMENDATION_ITEMS ||--o{ BRANCH_RECOMMENDATION_CLICKS : "has"

@@ -8,6 +8,8 @@ import com.fptis.intern.server.domain.branch.BranchCurrencyRateRepository;
 import com.fptis.intern.server.domain.branch.BranchRepository;
 import com.fptis.intern.server.domain.branch.BranchTimeSlot;
 import com.fptis.intern.server.domain.branch.BranchTimeSlotRepository;
+import com.fptis.intern.server.domain.currency.Currency;
+import com.fptis.intern.server.domain.currency.CurrencyRepository;
 import com.fptis.intern.server.domain.reservation.Reservation;
 import com.fptis.intern.server.domain.reservation.ReservationRepository;
 import com.fptis.intern.server.domain.reservation.ReservationStatus;
@@ -38,6 +40,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class ReservationService {
 
+    private static final double AMOUNT_LIMIT_USD = 10_000;
+    private static final double AMOUNT_MIN_VND = 10_000;
+
+
     private final ReservationRepository reservationRepository;
     private final UserRepository userRepository;
     private final BranchRepository branchRepository;
@@ -45,6 +51,7 @@ public class ReservationService {
     private final BranchTimeSlotRepository branchTimeSlotRepository;
     private final ReservationHoldService reservationHoldService;
     private final PaymentService paymentService;
+    private final CurrencyRepository currencyRepository;
 
     /**
      * 이 메서드 자체는 직접 쓰기를 하지 않지만, 클래스 기본값(readOnly=true)을 그대로 두면
@@ -61,10 +68,19 @@ public class ReservationService {
 
         assertNoShowLimitNotExceeded(userId, now);
         assertNoConcurrentPendingPayment(userId);
-        // 금액 한도 검증(AMOUNT_LIMIT_EXCEEDED/AMOUNT_BELOW_MINIMUM)은 기준 환율(Currency 도메인)이
-        // 있어야 USD/VND 상당액을 계산할 수 있어 이번 범위에서 생략한다 — #26에서 연동 예정.
+
+        // 금액 한도 검증 (#26) — createHold 전에 Currency/Rate를 미리 읽어 한도 확인 후 lockedRate 계산
+        Branch branchForValidation = branchRepository.findById(request.branchId())
+                .orElseThrow(() -> new BusinessException(BusinessErrorCode.BRANCH_NOT_FOUND));
+        Currency currency = currencyRepository.findByCode(request.currencyCode())
+                .orElseThrow(() -> new BusinessException(BusinessErrorCode.CURRENCY_NOT_FOUND));
+        BranchCurrencyRate rateForValidation = branchCurrencyRateRepository
+                .findRate(branchForValidation.getId(), request.currencyCode())
+                .orElseThrow(() -> new BusinessException(BusinessErrorCode.STOCK_EXCEEDED));
+        double lockedRate = assertAmountWithinLimits(currency, rateForValidation, request.amount());
 
         Reservation reservation = reservationHoldService.createHold(userId, request, now);
+        reservation.assignLockedRate(lockedRate);
 
         // Stripe PaymentIntent 생성 실패 시 이 예약은 결제 연결 없는 PENDING_PAYMENT로 남지만,
         // 5분 결제 TTL이 지나면 expireOverduePendingPayments()가 재고/슬롯을 알아서 회수한다.
@@ -231,6 +247,30 @@ public class ReservationService {
         }
     }
 
+    /**
+     * PRD §19.1, §21.2: USD 10,000 상당액 이상은 차단하고, 10,000 VND 상당액 미만도 차단한다.
+     * 세 통화(요청 통화/USD/VND) 모두 KRW 기준 환율(Currency.sellRate)로 환산해 비교한다 —
+     * 한도는 지점 우대율과 무관한 시장 기준액이라 지점별 finalRate가 아닌 Currency의 기준
+     * sellRate를 쓴다. 반환값은 이 지점의 finalRate로, 예약에 그대로 lockedRate로 고정된다.
+     */
+    private double assertAmountWithinLimits(Currency currency, BranchCurrencyRate rate, double amount) {
+        double amountKrw = currency.getSellRate() * amount;
+
+        Currency usd = currency.getCode().equalsIgnoreCase("USD")
+                ? currency : currencyRepository.findByCode("USD").orElse(null);
+        if (usd != null && amountKrw >= usd.getSellRate() * AMOUNT_LIMIT_USD) {
+            throw new BusinessException(BusinessErrorCode.AMOUNT_LIMIT_EXCEEDED);
+        }
+
+        Currency vnd = currency.getCode().equalsIgnoreCase("VND")
+                ? currency : currencyRepository.findByCode("VND").orElse(null);
+        if (vnd != null && amountKrw < vnd.getSellRate() * AMOUNT_MIN_VND) {
+            throw new BusinessException(BusinessErrorCode.AMOUNT_BELOW_MINIMUM);
+        }
+
+        return currency.calculateFinalRate(rate.getPreferentialRate());
+    }
+
     private void assertOwner(Reservation reservation, Long userId) {
         if (!reservation.getUserId().equals(userId)) {
             throw new BusinessException(BusinessErrorCode.FORBIDDEN);
@@ -262,8 +302,13 @@ public class ReservationService {
                                                 String paymentClientSecret) {
         Double preferentialRate = rate != null ? rate.getPreferentialRate() : null;
         boolean reservationAvailable = rate != null && rate.hasStock();
+        Double finalRate = rate != null
+                ? currencyRepository.findByCode(reservation.getCurrencyCode())
+                        .map(currency -> currency.calculateFinalRate(rate.getPreferentialRate()))
+                        .orElse(null)
+                : null;
         BranchSummaryResponse branchSummary = BranchSummaryResponse.of(branch, null,
-                branch.isOpenNow(LocalDateTime.now()), preferentialRate, reservationAvailable);
+                branch.isOpenNow(LocalDateTime.now()), preferentialRate, finalRate, reservationAvailable);
         return ReservationDetailResponse.of(reservation, branchSummary, paymentClientSecret);
     }
 

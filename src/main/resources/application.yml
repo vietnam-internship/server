@@ -70,6 +70,10 @@ logging:
   file:
     name: ${LOG_FILE_PATH:./logs/app.log}
 
+travelx:
+  ai:
+    server-url: ${AI_SERVER_URL:http://localhost:8081}
+
 springdoc:
   packages-to-scan: com.fptis.intern.server
   default-consumes-media-type: application/json;charset=UTF-8

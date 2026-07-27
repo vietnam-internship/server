@@ -42,4 +42,5 @@ public class BranchController {
     public ApiResponse<?> getBranch(@Parameter(description = "지점 ID") @PathVariable Long id) {
         return ApiResponse.success(branchService.getBranch(id));
     }
+
 }

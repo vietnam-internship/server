@@ -32,6 +32,23 @@ public enum BusinessErrorCode implements ErrorCode {
     CURRENCY_NOT_FOUND(HttpStatus.NOT_FOUND, "C102", "존재하지 않는 통화 코드입니다."),
     SIGNAL_NOT_FOUND(HttpStatus.NOT_FOUND, "C103", "매핑하려는 시그널 정보를 찾을 수 없습니다."),
 
+
+    /*
+     * [김두현 C1xx] 404 NOT_FOUND: 추천 세션/아이템
+     */
+    RECOMMENDATION_NOT_FOUND(HttpStatus.NOT_FOUND, "C105", "존재하지 않는 추천 세션입니다."),
+    RECOMMENDATION_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "C106", "존재하지 않는 추천 항목입니다."),
+
+    /*
+     * [김두현 C1xx] 202 ACCEPTED: 추천 연산 진행 중
+     */
+    RECOMMENDATION_PENDING(HttpStatus.ACCEPTED, "C107", "추천 결과를 아직 계산 중입니다."),
+
+    /*
+     * [김두현 C1xx] 502 BAD_GATEWAY: AI 서버 오류
+     */
+    AI_SERVER_ERROR(HttpStatus.BAD_GATEWAY, "C108", "AI 서버 오류가 발생했습니다."),
+
     /*
      * [김두현 C1xx] 409 CONFLICT: 리소스 충돌
      */
@@ -74,6 +91,8 @@ public enum BusinessErrorCode implements ErrorCode {
     QR_ALREADY_USED(HttpStatus.CONFLICT, "C210", "이미 사용되었거나 유효하지 않은 QR 코드입니다."),
     IDENTITY_MISMATCH(HttpStatus.CONFLICT, "C211", "신원 확인에 실패했습니다."),
     RESERVATION_ALREADY_EXPIRED(HttpStatus.CONFLICT, "C212", "결제 대기 시간이 만료된 예약입니다."),
+    AMOUNT_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "C214", "USD 10,000 상당액 이상은 예약할 수 없습니다."),
+    AMOUNT_BELOW_MINIMUM(HttpStatus.BAD_REQUEST, "C215", "최소 환전 금액(10,000 VND 상당액) 미만입니다."),
 
     /*
      * 유지훈 : C3xx (Payment)
