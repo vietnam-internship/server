@@ -50,6 +50,7 @@ public class BranchService {
                 .stream()
                 .collect(Collectors.groupingBy(BranchCurrencyRate::getBranchId));
 
+        // 목록 조회는 currency 파라미터 하나에 대해서만 finalRate를 계산하므로, 지점 수와 무관하게 조회 1건이면 충분하다.
         Currency currency = currencyCode != null ? currencyRepository.findByCode(currencyCode).orElse(null) : null;
 
         boolean hasLocation = latitude != null && longitude != null;
