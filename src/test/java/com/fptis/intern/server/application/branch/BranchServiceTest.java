@@ -111,7 +111,7 @@ class BranchServiceTest {
 
     @Test
     void getBranchComputesFinalRatePerCurrency() {
-        currencyRepository.save(Currency.builder()
+        Currency jpy = currencyRepository.save(Currency.builder()
                 .code("JPY")
                 .country("일본")
                 .buyRate(8.8)
