@@ -5,9 +5,6 @@ import com.fptis.intern.server.domain.reservation.ReservationStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-/**
- * lockedRate는 기준 환율(Currency 도메인)이 없어 항상 null이다 — #26에서 연동 예정.
- */
 public record ReservationSummaryResponse(
         Long id,
         String reservationNumber,
