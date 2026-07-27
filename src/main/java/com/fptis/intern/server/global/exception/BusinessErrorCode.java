@@ -34,6 +34,22 @@ public enum BusinessErrorCode implements ErrorCode {
 
 
     /*
+     * [김두현 C1xx] 404 NOT_FOUND: 추천 세션/아이템
+     */
+    RECOMMENDATION_NOT_FOUND(HttpStatus.NOT_FOUND, "C105", "존재하지 않는 추천 세션입니다."),
+    RECOMMENDATION_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "C106", "존재하지 않는 추천 항목입니다."),
+
+    /*
+     * [김두현 C1xx] 202 ACCEPTED: 추천 연산 진행 중
+     */
+    RECOMMENDATION_PENDING(HttpStatus.ACCEPTED, "C107", "추천 결과를 아직 계산 중입니다."),
+
+    /*
+     * [김두현 C1xx] 502 BAD_GATEWAY: AI 서버 오류
+     */
+    AI_SERVER_ERROR(HttpStatus.BAD_GATEWAY, "C108", "AI 서버 오류가 발생했습니다."),
+
+    /*
      * [김두현 C1xx] 409 CONFLICT: 리소스 충돌
      */
 
