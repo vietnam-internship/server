@@ -26,10 +26,10 @@ public class CurrencySyncService {
     private final ExchangeRateHistoryRepository historyRepository;
     private final RestTemplate restTemplate;
 
-    @Value("${EXCHANGERATE_API_KEY}")
+    @Value("${travelx.exchange-rate.key}")
     private String apiKey;
 
-    @Value("${EXCHANGERATE_API_URL}")
+    @Value("${travelx.exchange-rate.url}")
     private String apiUrl;
 
     // 매일 자정 실행 (cron = "초 분 시 일 월 요일")
