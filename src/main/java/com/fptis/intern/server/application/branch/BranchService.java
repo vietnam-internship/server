@@ -7,7 +7,6 @@ import com.fptis.intern.server.domain.branch.BranchRepository;
 import com.fptis.intern.server.domain.branch.BranchSortType;
 import com.fptis.intern.server.domain.currency.Currency;
 import com.fptis.intern.server.domain.currency.CurrencyRepository;
-import com.fptis.intern.server.global.config.BranchRecommendationProperties;
 import com.fptis.intern.server.global.exception.BusinessErrorCode;
 import com.fptis.intern.server.global.exception.BusinessException;
 import com.fptis.intern.server.global.util.GeoUtil;
@@ -15,17 +14,13 @@ import com.fptis.intern.server.presentation.branch.dto.BranchCreateRequest;
 import com.fptis.intern.server.presentation.branch.dto.BranchCurrencyRateResponse;
 import com.fptis.intern.server.presentation.branch.dto.BranchDetailResponse;
 import com.fptis.intern.server.presentation.branch.dto.BranchRateUpdateRequest;
-import com.fptis.intern.server.presentation.branch.dto.BranchRecommendation;
-import com.fptis.intern.server.presentation.branch.dto.BranchRecommendationResponse;
 import com.fptis.intern.server.presentation.branch.dto.BranchSummaryResponse;
 import com.fptis.intern.server.presentation.branch.dto.BranchUpdateRequest;
-import com.fptis.intern.server.presentation.branch.dto.ScoreBreakdown;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -39,14 +34,13 @@ public class BranchService {
 
     /**
      * BranchDetail.isBestRateNearby(PRD §18.2)의 "주변" 반경 — 이 엔드포인트는 사용자 위치 파라미터가 없어
-     * /branches/recommend의 기본 반경(radius_km=5)을 그대로 재사용한다.
+     * /branches/recommendations의 기본 반경(radius_km=5)을 그대로 재사용한다.
      */
     private static final double NEARBY_RADIUS_KM = 5.0;
 
     private final BranchRepository branchRepository;
     private final BranchCurrencyRateRepository branchCurrencyRateRepository;
     private final CurrencyRepository currencyRepository;
-    private final BranchRecommendationProperties recommendationProperties;
 
     public List<BranchSummaryResponse> listBranches(String currencyCode, Double latitude, Double longitude,
                                                       BranchSortType sort) {
@@ -56,7 +50,6 @@ public class BranchService {
                 .stream()
                 .collect(Collectors.groupingBy(BranchCurrencyRate::getBranchId));
 
-        // 목록 조회는 currency 파라미터 하나에 대해서만 finalRate를 계산하므로, 지점 수와 무관하게 조회 1건이면 충분하다.
         Currency currency = currencyCode != null ? currencyRepository.findByCode(currencyCode).orElse(null) : null;
 
         boolean hasLocation = latitude != null && longitude != null;
@@ -75,51 +68,6 @@ public class BranchService {
         Branch branch = getBranchOrThrow(id);
         List<BranchCurrencyRate> rates = branchCurrencyRateRepository.findRatesByBranch(id);
         return buildDetail(branch, rates);
-    }
-
-    /**
-     * PRD §18.2: 거리/환율/재고/예약 가능성 4개 요소의 가중 합산 점수로 근처 환전소를 랭킹한다.
-     * radiusKm 밖이거나 currencyCode를 취급하지 않는 지점은 후보에서 제외한다. 각 하위 점수는
-     * 이번 검색 결과(후보 집합) 내에서 0~1로 상대 정규화한다 — 절대 기준값(예: "표준 재고량")이
-     * 정의돼 있지 않아서다. isBestRateNearby는 이 검색 반경/통화 기준 후보 전체(top_n 절단 전) 중
-     * 최저 finalRate 여부로 판단한다.
-     */
-    public BranchRecommendationResponse recommendBranches(double latitude, double longitude, String currencyCode,
-                                                            double radiusKm, int topN) {
-        Currency currency = currencyRepository.findByCode(currencyCode)
-                .orElseThrow(() -> new BusinessException(BusinessErrorCode.CURRENCY_NOT_FOUND));
-
-        List<Branch> branches = branchRepository.findActiveBranches();
-        List<Long> branchIds = branches.stream().map(Branch::getId).toList();
-        Map<Long, BranchCurrencyRate> rateByBranch = branchCurrencyRateRepository.findRatesByBranches(branchIds)
-                .stream()
-                .filter(rate -> rate.getCurrencyCode().equalsIgnoreCase(currencyCode))
-                .collect(Collectors.toMap(BranchCurrencyRate::getBranchId, Function.identity()));
-
-        List<RecommendationCandidate> candidates = branches.stream()
-                .map(branch -> toCandidate(branch, rateByBranch.get(branch.getId()), currency, latitude, longitude, radiusKm))
-                .filter(Objects::nonNull)
-                .toList();
-
-        if (candidates.isEmpty()) {
-            return BranchRecommendationResponse.of(List.of());
-        }
-
-        double minFinalRate = candidates.stream().mapToDouble(RecommendationCandidate::finalRate).min().orElseThrow();
-        double maxFinalRate = candidates.stream().mapToDouble(RecommendationCandidate::finalRate).max().orElseThrow();
-        double minStock = candidates.stream().mapToDouble(c -> c.rate().getReservationOnlyStock()).min().orElseThrow();
-        double maxStock = candidates.stream().mapToDouble(c -> c.rate().getReservationOnlyStock()).max().orElseThrow();
-        int minCapacity = candidates.stream().mapToInt(c -> c.branch().getTimeSlotCapacity()).min().orElseThrow();
-        int maxCapacity = candidates.stream().mapToInt(c -> c.branch().getTimeSlotCapacity()).max().orElseThrow();
-
-        List<BranchRecommendation> results = candidates.stream()
-                .map(c -> toRecommendation(c, radiusKm, minFinalRate, maxFinalRate, minStock, maxStock, minCapacity, maxCapacity))
-                .sorted(Comparator.comparingDouble(BranchRecommendation::totalScore).reversed()
-                        .thenComparing(BranchRecommendation::distanceKm))
-                .limit(Math.max(topN, 0))
-                .toList();
-
-        return BranchRecommendationResponse.of(results);
     }
 
     @Transactional
@@ -243,7 +191,7 @@ public class BranchService {
     }
 
     /**
-     * finalRate(기준 환율 × (1 − 우대율))가 낮을수록 고객에게 유리한 조건이라 오름차순 정렬한다.
+     * finalRate(기준 환율 × (1 − 우대율/100))가 낮을수록 고객에게 유리한 조건이라 오름차순 정렬한다.
      */
     private void sort(List<BranchSummaryResponse> summaries, BranchSortType sort, String currencyCode, boolean hasLocation) {
         if (sort == BranchSortType.DISTANCE && hasLocation) {
@@ -253,58 +201,6 @@ public class BranchService {
             summaries.sort(Comparator.comparing(BranchSummaryResponse::finalRate,
                     Comparator.nullsLast(Comparator.naturalOrder())));
         }
-    }
-
-    private RecommendationCandidate toCandidate(Branch branch, BranchCurrencyRate rate, Currency currency,
-                                                 double latitude, double longitude, double radiusKm) {
-        if (rate == null) {
-            return null;
-        }
-        double distanceKm = GeoUtil.distanceKm(latitude, longitude, branch.getLatitude(), branch.getLongitude());
-        if (distanceKm > radiusKm) {
-            return null;
-        }
-        double finalRate = currency.calculateFinalRate(rate.getPreferentialRate());
-        return new RecommendationCandidate(branch, rate, distanceKm, finalRate);
-    }
-
-    private BranchRecommendation toRecommendation(RecommendationCandidate candidate, double radiusKm,
-                                                    double minFinalRate, double maxFinalRate,
-                                                    double minStock, double maxStock,
-                                                    int minCapacity, int maxCapacity) {
-        double distanceScore = radiusKm <= 0
-                ? (candidate.distanceKm() <= 0 ? 1.0 : 0.0)
-                : clamp(1 - candidate.distanceKm() / radiusKm);
-        double rateScore = normalize(maxFinalRate - candidate.finalRate(), maxFinalRate - minFinalRate);
-        double availabilityScore = normalize(candidate.rate().getReservationOnlyStock() - minStock, maxStock - minStock);
-        double reservationScore = normalize(candidate.branch().getTimeSlotCapacity() - minCapacity, maxCapacity - minCapacity);
-
-        double totalScore = recommendationProperties.distanceWeight() * distanceScore
-                + recommendationProperties.rateWeight() * rateScore
-                + recommendationProperties.availabilityWeight() * availabilityScore
-                + recommendationProperties.reservationWeight() * reservationScore;
-
-        boolean isBestRateNearby = candidate.finalRate() <= minFinalRate;
-        ScoreBreakdown breakdown = new ScoreBreakdown(distanceScore, rateScore, availabilityScore, reservationScore);
-
-        return BranchRecommendation.of(candidate.branch(), candidate.distanceKm(),
-                candidate.rate().getPreferentialRate(), candidate.finalRate(), candidate.rate().hasStock(),
-                totalScore, breakdown, isBestRateNearby);
-    }
-
-    private double clamp(double value) {
-        return Math.max(0, Math.min(1, value));
-    }
-
-    /**
-     * 후보 집합 내 상대 정규화 — 절대 기준값이 없어 min-max로 0~1 스케일링한다.
-     * 모든 후보가 동일하면(range=0) 비교할 게 없으므로 만점(1.0)으로 취급한다.
-     */
-    private double normalize(double diff, double range) {
-        return range == 0 ? 1.0 : clamp(diff / range);
-    }
-
-    private record RecommendationCandidate(Branch branch, BranchCurrencyRate rate, double distanceKm, double finalRate) {
     }
 
     private Branch getBranchOrThrow(Long id) {

@@ -71,12 +71,8 @@ logging:
     name: ${LOG_FILE_PATH:./logs/app.log}
 
 travelx:
-  branch:
-    recommend:
-      distance-weight: ${BRANCH_RECOMMEND_DISTANCE_WEIGHT:0.35}
-      rate-weight: ${BRANCH_RECOMMEND_RATE_WEIGHT:0.35}
-      availability-weight: ${BRANCH_RECOMMEND_AVAILABILITY_WEIGHT:0.20}
-      reservation-weight: ${BRANCH_RECOMMEND_RESERVATION_WEIGHT:0.10}
+  ai:
+    server-url: ${AI_SERVER_URL:http://localhost:8081}
 
 springdoc:
   packages-to-scan: com.fptis.intern.server

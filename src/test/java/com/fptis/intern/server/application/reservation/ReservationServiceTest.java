@@ -92,7 +92,8 @@ class ReservationServiceTest {
                 branchRepository, branchCurrencyRateRepository, branchTimeSlotRepository);
         paymentService = new PaymentService(reservationRepository, paymentRepository, new FakePaymentGateway());
         reservationService = new ReservationService(reservationRepository, userRepository, branchRepository,
-                branchCurrencyRateRepository, branchTimeSlotRepository, reservationHoldService, paymentService);
+                branchCurrencyRateRepository, branchTimeSlotRepository, reservationHoldService, paymentService,
+                currencyRepository);
 
         verifiedUser = userRepository.save(User.builder()
                 .name("tester")

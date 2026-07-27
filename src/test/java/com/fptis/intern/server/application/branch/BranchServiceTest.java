@@ -1,7 +1,6 @@
 package com.fptis.intern.server.application.branch;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 
@@ -12,13 +11,8 @@ import com.fptis.intern.server.domain.branch.BranchRepository;
 import com.fptis.intern.server.domain.branch.BranchSortType;
 import com.fptis.intern.server.domain.currency.Currency;
 import com.fptis.intern.server.domain.currency.CurrencyRepository;
-import com.fptis.intern.server.global.config.BranchRecommendationConfig;
-import com.fptis.intern.server.global.exception.BusinessErrorCode;
-import com.fptis.intern.server.global.exception.BusinessException;
 import com.fptis.intern.server.presentation.branch.dto.BranchCurrencyRateResponse;
 import com.fptis.intern.server.presentation.branch.dto.BranchDetailResponse;
-import com.fptis.intern.server.presentation.branch.dto.BranchRecommendation;
-import com.fptis.intern.server.presentation.branch.dto.BranchRecommendationResponse;
 import com.fptis.intern.server.presentation.branch.dto.BranchSummaryResponse;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +36,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @DataJpaTest
 @EnableJpaAuditing
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({BranchService.class, BranchRecommendationConfig.class})
+@Import(BranchService.class)
 class BranchServiceTest {
 
     @Container
@@ -69,10 +63,6 @@ class BranchServiceTest {
     }
 
     private Branch saveBranch(String name, double latitude, double longitude) {
-        return saveBranch(name, latitude, longitude, 4);
-    }
-
-    private Branch saveBranch(String name, double latitude, double longitude, int timeSlotCapacity) {
         return branchRepository.save(Branch.builder()
                 .name(name)
                 .address("서울 중구 명동길 1")
@@ -80,20 +70,16 @@ class BranchServiceTest {
                 .longitude(longitude)
                 .phone("02-123-4567")
                 .businessHours("평일 09:00-18:00")
-                .timeSlotCapacity(timeSlotCapacity)
+                .timeSlotCapacity(4)
                 .build());
     }
 
     private void saveRate(Branch branch, String currencyCode, double preferentialRate) {
-        saveRate(branch, currencyCode, preferentialRate, 1000);
-    }
-
-    private void saveRate(Branch branch, String currencyCode, double preferentialRate, double reservationOnlyStock) {
         branchCurrencyRateRepository.save(BranchCurrencyRate.builder()
                 .branchId(branch.getId())
                 .currencyCode(currencyCode)
                 .preferentialRate(preferentialRate)
-                .reservationOnlyStock(reservationOnlyStock)
+                .reservationOnlyStock(1000)
                 .build());
     }
 
@@ -125,7 +111,7 @@ class BranchServiceTest {
 
     @Test
     void getBranchComputesFinalRatePerCurrency() {
-        Currency jpy = currencyRepository.save(Currency.builder()
+        currencyRepository.save(Currency.builder()
                 .code("JPY")
                 .country("일본")
                 .buyRate(8.8)
@@ -180,86 +166,5 @@ class BranchServiceTest {
 
         assertThat(detail.isBestRateNearby()).isFalse();
         assertThat(detail.currencies()).isEmpty();
-    }
-
-    @Test
-    void recommendBranchesExcludesOutOfRadiusAndUnsupportedCurrency() {
-        Branch inRange = saveBranch("반경 내 지점", 37.5665, 126.9780);
-        saveRate(inRange, "USD", 1.0);
-
-        Branch outOfRange = saveBranch("반경 밖 지점", 37.6665, 126.9780); // 위도 +0.1 ≈ 11km
-        saveRate(outOfRange, "USD", 5.0);
-
-        Branch noUsd = saveBranch("USD 미취급 지점", 37.5666, 126.9781);
-        saveRate(noUsd, "JPY", 1.0);
-
-        BranchRecommendationResponse response = branchService.recommendBranches(37.5665, 126.9780, "USD", 5.0, 10);
-
-        assertThat(response.results()).extracting(BranchRecommendation::id).containsExactly(inRange.getId());
-    }
-
-    @Test
-    void recommendBranchesRanksBranchThatDominatesOnAllFactorsFirst() {
-        // 거리/환율/재고/슬롯정원 4개 요소 모두 우월한 지점 vs 모두 열세인 지점 — 가중치 값과 무관하게 순위가 갈려야 한다.
-        Branch superior = saveBranch("우수 지점", 37.5665, 126.9780, 10);
-        saveRate(superior, "USD", 5.0, 2000); // finalRate = 1400*0.95 = 1330.0
-
-        Branch inferior = saveBranch("열세 지점", 37.5765, 126.9780, 1); // ≈ 1.1km
-        saveRate(inferior, "USD", 0.1, 100); // finalRate = 1400*0.999 = 1398.6
-
-        BranchRecommendationResponse response = branchService.recommendBranches(37.5665, 126.9780, "USD", 5.0, 10);
-
-        assertThat(response.results()).extracting(BranchRecommendation::id)
-                .containsExactly(superior.getId(), inferior.getId());
-        assertThat(response.results().get(0).totalScore()).isGreaterThan(response.results().get(1).totalScore());
-        assertThat(response.disclaimer()).isNotBlank();
-    }
-
-    @Test
-    void recommendBranchesLimitsToTopN() {
-        for (int i = 0; i < 3; i++) {
-            Branch branch = saveBranch("지점" + i, 37.5665 + i * 0.001, 126.9780);
-            saveRate(branch, "USD", 1.0);
-        }
-
-        BranchRecommendationResponse response = branchService.recommendBranches(37.5665, 126.9780, "USD", 5.0, 2);
-
-        assertThat(response.results()).hasSize(2);
-    }
-
-    @Test
-    void recommendBranchesMarksLowestFinalRateAsBestRateNearby() {
-        Branch cheaper = saveBranch("최저가 지점", 37.5665, 126.9780);
-        saveRate(cheaper, "USD", 2.0); // finalRate 1372.0
-
-        Branch pricier = saveBranch("보통 지점", 37.5666, 126.9781);
-        saveRate(pricier, "USD", 0.5); // finalRate 1393.0
-
-        BranchRecommendationResponse response = branchService.recommendBranches(37.5665, 126.9780, "USD", 5.0, 10);
-
-        assertThat(response.results())
-                .filteredOn(r -> r.id().equals(cheaper.getId())).singleElement()
-                .extracting(BranchRecommendation::isBestRateNearby).isEqualTo(true);
-        assertThat(response.results())
-                .filteredOn(r -> r.id().equals(pricier.getId())).singleElement()
-                .extracting(BranchRecommendation::isBestRateNearby).isEqualTo(false);
-    }
-
-    @Test
-    void recommendBranchesThrowsWhenCurrencyNotFound() {
-        assertThatThrownBy(() -> branchService.recommendBranches(37.5665, 126.9780, "EUR", 5.0, 10))
-                .isInstanceOf(BusinessException.class)
-                .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(BusinessErrorCode.CURRENCY_NOT_FOUND);
-    }
-
-    @Test
-    void recommendBranchesReturnsEmptyResultsWhenNoCandidateInRadius() {
-        Branch outOfRange = saveBranch("반경 밖 지점", 37.6665, 126.9780);
-        saveRate(outOfRange, "USD", 1.0);
-
-        BranchRecommendationResponse response = branchService.recommendBranches(37.5665, 126.9780, "USD", 5.0, 10);
-
-        assertThat(response.results()).isEmpty();
     }
 }
