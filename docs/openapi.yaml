@@ -63,7 +63,18 @@ tags:
   - name: Currency
     description: 통화/환율 조회, 환율 이력, AI 환전 타이밍 추천
   - name: Branch
-    description: 지점 조회, AI 환전소 추천, 지점 우대율/재고 설정, QR 픽업 검증
+    description: 지점 조회, 지점 우대율/재고 설정, QR 픽업 검증
+  - name: Branch Recommendation
+    description: |
+      AI 환전소 추천 API (On-Demand 비동기)
+
+      Client → POST /branches/recommendations (202 + sessionId)
+                        ↓
+      Server: PENDING 세션 생성 → AI 비동기 요청
+                                        ↓
+      AI: 연산 완료 후 POST /internal/ai/recommendations/branches 콜백
+                                        ↓
+      Client: GET /branches/recommendations?sessionId={id} 폴링
   - name: Reservation
     description: 환전 예약 생성/조회/취소, 영수증 다운로드
   - name: Notification
@@ -430,69 +441,95 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /branches/recommend:
-    get:
-      tags: [Branch]
-      operationId: recommendBranches
-      summary: AI 환전소 추천 (근처 지점 랭킹)
+  /branches/recommendations:
+    post:
+      tags: [Branch Recommendation]
+      operationId: createBranchRecommendation
+      summary: AI 환전소 추천 요청
       description: |
-        거리/환율/재고/예약 가능성 4개 요소의 가중 합산 점수로 근처 환전소를 랭킹합니다. (PRD §18)
+        위치·통화·금액 정보를 AI에 전달해 주변 환전소 랭킹 연산을 시작합니다. (PRD §18)
 
-        ```
-        total_score = w1·distance + w2·rate + w3·availability + w4·reservation
-        (초기 가중치: 0.35 / 0.35 / 0.20 / 0.10 — 서비스 정책 값, 하드코딩 금지)
-        ```
-        `total_score` 내림차순 정렬, 동점 시 `distanceScore`가 타이브레이커.
-        결과는 참고용 추천이며 최종 선택은 사용자에게 있습니다. (PRD §18.6 면책)
+        연산은 비동기로 진행되므로 **202 Accepted**와 함께 `sessionId`를 즉시 반환합니다.
+        결과는 `GET /branches/recommendations?sessionId={id}`로 폴링해 확인하세요.
+
+        데이터 흐름:
+        1. Server: PENDING 세션 생성 → AI 서버에 비동기 연산 요청
+        2. AI: 랭킹 연산 완료 후 `POST /internal/ai/recommendations/branches`로 결과 푸시
+        3. Client: `GET /branches/recommendations?sessionId={id}`로 폴링하여 COMPLETED 확인
       security: []
-      parameters:
-        - name: latitude
-          in: query
-          required: true
-          description: 사용자 현재 위도
-          schema:
-            type: number
-            format: double
-            example: 37.5665
-        - name: longitude
-          in: query
-          required: true
-          description: 사용자 현재 경도
-          schema:
-            type: number
-            format: double
-            example: 126.9780
-        - name: currency
-          in: query
-          required: true
-          description: 환전 희망 통화 코드
-          schema:
-            type: string
-            example: USD
-        - name: radius_km
-          in: query
-          required: false
-          description: 검색 반경 (km)
-          schema:
-            type: number
-            format: double
-            default: 5
-        - name: top_n
-          in: query
-          required: false
-          description: 최대 반환 지점 수 (환율 상세 화면은 top_n=4 요청)
-          schema:
-            type: integer
-            default: 10
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchRecommendationCreateRequest'
       responses:
-        '200':
-          description: 추천 점수 내림차순 지점 목록
+        '202':
+          description: 추천 연산 시작됨 — sessionId로 결과를 폴링하세요
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BranchRecommendationResponse'
+                $ref: '#/components/schemas/BranchRecommendationCreateResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+
+    get:
+      tags: [Branch Recommendation]
+      operationId: getBranchRecommendation
+      summary: AI 환전소 추천 결과 조회 (폴링)
+      description: |
+        `sessionId`로 추천 세션의 상태와 결과를 조회합니다.
+
+        | status | 의미 | results |
+        |--------|------|---------|
+        | `PENDING` | AI 연산 진행 중 | 빈 배열 |
+        | `COMPLETED` | 연산 완료 | 추천 목록 (ranking 오름차순) |
+        | `FAILED` | AI 서버 오류 | 빈 배열 |
+
+        `COMPLETED` 응답에는 `isBestRateNearby`(이번 세션 반경 내 최저 환율 여부),
+        `ScoreBreakdown`(요소별 점수), `disclaimer`(면책 고지)가 포함됩니다. (PRD §18.6)
+      security: []
+      parameters:
+        - name: sessionId
+          in: query
+          required: true
+          description: POST /branches/recommendations에서 발급된 추천 세션 ID
+          schema:
+            type: integer
+            format: int64
+            example: 42
+      responses:
+        '200':
+          description: 추천 세션 상태 및 결과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BranchRecommendationQueryResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /branches/recommendations/items/{itemId}/click:
+    post:
+      tags: [Branch Recommendation]
+      operationId: recordRecommendationClick
+      summary: 추천 환전소 클릭 이벤트 기록
+      description: |
+        사용자가 추천 목록의 환전소를 클릭할 때 호출합니다.
+        CTR(Click-Through Rate) 측정용 클릭 로그를 적재합니다.
+      security: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          description: 클릭한 추천 아이템 ID
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: 클릭 로그 기록 완료 (본문 없음)
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /branches/{id}/reservations/{reservationId}/redeem:
     post:
@@ -1106,6 +1143,46 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
+  /internal/ai/recommendations/branches:
+    post:
+      tags: [AI Internal]
+      operationId: internalPushBranchRecommendation
+      summary: (Internal) AI 환전소 추천 결과 푸시
+      description: |
+        AI 인스턴스가 환전소 랭킹 연산을 완료한 뒤 결과를 밀어 넣는 콜백 API입니다.
+
+        처리 순서:
+        1. `sessionId`로 PENDING 세션 조회
+        2. `rankedBranches` 목록을 `branch_recommendation_items`에 저장
+        3. 세션 상태를 `COMPLETED`로 전환
+
+        이 API는 AI_AGENT 권한이 필요하며 외부에 노출되지 않는 Internal API입니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BranchRecommendationPushRequest'
+      responses:
+        '200':
+          description: 결과 저장 및 세션 COMPLETED 전환 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    enum: [SUCCESS]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: 'C105 — 존재하지 않는 추천 세션'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   # ──────────────────────────── Branch Admin (Missing APIs) ────────────────────────────
   /branches/{id}/reservations:
     get:
@@ -1551,16 +1628,64 @@ components:
           description: 오늘 앱 예약에 노출할 전용 재고 수량
           example: 2000
 
-    BranchRecommendationResponse:
+    BranchRecommendationCreateRequest:
+      type: object
+      required: [latitude, longitude, radiusKm, currency, amount]
+      properties:
+        latitude:
+          type: number
+          format: double
+          description: 사용자 현재 위도
+          example: 37.5665
+        longitude:
+          type: number
+          format: double
+          description: 사용자 현재 경도
+          example: 126.9780
+        radiusKm:
+          type: number
+          format: double
+          description: 검색 반경 (km)
+          example: 5.0
+        currency:
+          type: string
+          description: 환전 희망 통화 코드
+          example: USD
+        amount:
+          type: number
+          format: double
+          description: 환전 희망 금액 (외화 기준)
+          example: 1000.0
+
+    BranchRecommendationCreateResponse:
       type: object
       properties:
+        sessionId:
+          type: integer
+          format: int64
+          description: 추천 세션 ID — GET /branches/recommendations?sessionId={id}로 결과 폴링
+          example: 42
+
+    BranchRecommendationQueryResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED]
+          description: |
+            추천 세션 상태
+            - PENDING: AI 연산 진행 중
+            - COMPLETED: 결과 조회 가능
+            - FAILED: AI 서버 오류 발생
+          example: COMPLETED
         results:
           type: array
-          description: total_score 내림차순 (동점 시 distanceScore 우선)
+          description: 추천 환전소 목록 (ranking 오름차순). PENDING/FAILED이면 빈 배열
           items:
             $ref: '#/components/schemas/BranchRecommendation'
         disclaimer:
           type: string
+          description: 면책 고지 문구
           example: 본 추천은 투자·금융 조언이 아니며 참고용으로만 제공됩니다.
 
     BranchRecommendation:
@@ -1568,39 +1693,83 @@ components:
         - $ref: '#/components/schemas/BranchSummary'
         - type: object
           properties:
+            ranking:
+              type: integer
+              description: AI가 산출한 순위 (1위부터 시작)
+              example: 1
             totalScore:
               type: number
               format: double
               minimum: 0
               maximum: 1
-              description: 최종 추천 점수 (0–1, PRD §18.2)
-              example: 0.82
+              description: AI 산출 종합 점수 (0.0–1.0)
+              example: 0.87
             breakdown:
               $ref: '#/components/schemas/ScoreBreakdown'
             isBestRateNearby:
               type: boolean
-              description: 주변 최저 매도 환율 여부 (totalScore와 무관한 독립 플래그)
+              description: 이번 세션 검색 반경 내 최저 매도 환율 여부 (totalScore와 무관한 독립 플래그)
 
     ScoreBreakdown:
       type: object
-      description: 요소별 기여 점수 (가중치 w1=0.35 거리, w2=0.35 환율, w3=0.20 재고, w4=0.10 예약)
+      description: AI가 산출한 요소별 기여 점수 (0.0–1.0)
       properties:
         distanceScore:
           type: number
           format: double
+          description: 거리 점수 (가까울수록 높음)
           example: 0.9
         rateScore:
           type: number
           format: double
+          description: 환율 점수 (유리할수록 높음)
           example: 0.85
         availabilityScore:
           type: number
           format: double
+          description: 재고 점수 (잔여 재고가 많을수록 높음)
           example: 0.7
         reservationScore:
           type: number
           format: double
+          description: 예약 가용성 점수 (슬롯 여유가 많을수록 높음)
           example: 0.6
+
+    BranchRecommendationPushRequest:
+      type: object
+      required: [sessionId, rankedBranches]
+      properties:
+        sessionId:
+          type: integer
+          format: int64
+          description: 결과를 수신할 추천 세션 ID
+          example: 42
+        rankedBranches:
+          type: array
+          description: AI가 산출한 환전소 랭킹 목록
+          items:
+            $ref: '#/components/schemas/RankedBranchItem'
+
+    RankedBranchItem:
+      type: object
+      required: [branchId, ranking, score]
+      properties:
+        branchId:
+          type: integer
+          format: int64
+          description: 추천 대상 환전소(지점) ID
+          example: 7
+        ranking:
+          type: integer
+          description: 순위 (1위부터 시작)
+          example: 1
+        score:
+          type: number
+          format: double
+          description: AI 산출 종합 점수 (0.0–1.0)
+          example: 0.87
+        breakdown:
+          $ref: '#/components/schemas/ScoreBreakdown'
 
     BranchCreateRequest:
       type: object
