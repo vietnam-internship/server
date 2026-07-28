@@ -42,7 +42,11 @@ public record ReservationDetailResponse(
         boolean isPendingPayment = reservation.getStatus() == ReservationStatus.PENDING_PAYMENT;
         LocalDateTime paymentExpiresAt = isPendingPayment ? reservation.getPaymentExpiresAt() : null;
         LocalDateTime expiresAt = isReserved ? reservation.getExpiresAt() : null;
-        String qrPayload = isReserved ? reservation.getQrToken() : null;
+        // "{branchId}:{reservationId}:{token}" — 관리자 화면이 QR 하나만 보고 리딤 API
+        // (POST /branches/{id}/reservations/{reservationId}/redeem)를 바로 호출할 수 있게 한다.
+        String qrPayload = isReserved
+                ? reservation.getBranchId() + ":" + reservation.getId() + ":" + reservation.getQrToken()
+                : null;
         Double amountFrom = reservation.getLockedRate() != null
                 ? reservation.getAmount() * reservation.getLockedRate()
                 : null;

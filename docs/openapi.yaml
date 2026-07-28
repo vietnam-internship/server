@@ -1963,7 +1963,11 @@ components:
             qrPayload:
               type: string
               nullable: true
-              description: 일회용 QR 페이로드 — RESERVED 상태에만 포함, 사용 즉시 무효화
+              description: >-
+                일회용 QR 페이로드 — RESERVED 상태에만 포함, 사용 즉시 무효화.
+                "{branchId}:{reservationId}:{token}" 형식이며, 리딤 시 token 부분만
+                RedeemRequest.qrToken으로 보낸다.
+              example: "3:12:xR7pQm9k2..."
             pickedUpAt:
               type: string
               format: date-time

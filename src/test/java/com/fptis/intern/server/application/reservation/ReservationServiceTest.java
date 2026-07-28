@@ -333,9 +333,11 @@ class ReservationServiceTest {
         ReservationDetailResponse created = reservationService.createReservation(
                 verifiedUser.getId(), createRequest(LocalDate.now().plusDays(1), "10:30"));
         ReservationDetailResponse confirmed = confirmPayment(verifiedUser.getId(), created.id());
+        // qrPayload는 "{branchId}:{reservationId}:{token}" 형식이라 실제 토큰만 뽑아 써야 한다.
+        String qrToken = confirmed.qrPayload().split(":", 3)[2];
 
         var redeemed = reservationService.redeem(branch.getId(), created.id(),
-                new RedeemRequest(confirmed.qrPayload(), true));
+                new RedeemRequest(qrToken, true));
 
         assertThat(redeemed.status()).isEqualTo(ReservationStatus.COMPLETED);
         assertThat(redeemed.pickedUpAt()).isNotNull();
