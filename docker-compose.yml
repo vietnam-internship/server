@@ -32,6 +32,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      EXCHANGERATE_API_KEY: ${EXCHANGERATE_API_KEY}
+      EXCHANGERATE_API_URL: ${EXCHANGERATE_API_URL}
     depends_on:
       db:
         condition: service_healthy
