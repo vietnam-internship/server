@@ -13,6 +13,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByGoogleId(String googleId);
 
+    long countByRole(Role role);
+
     /**
      * 노쇼 이력이 있는 유저의 "활성 예약 수 확인 → 생성" 구간에서 동시 요청이 카운트를
      * 동시에 0으로 읽고 둘 다 통과하는 것을 막기 위해, 카운트 확인 전 이 메서드로 유저 행 락을 잡는다.

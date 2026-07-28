@@ -3,6 +3,7 @@ package com.fptis.intern.server.domain.reservation;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -53,4 +54,43 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     @Query("select count(r) from Reservation r where r.userId = :userId and r.status = :status")
     long countByUserIdAndStatus(@Param("userId") Long userId, @Param("status") ReservationStatus status);
+
+    @Query("select count(r) from Reservation r where r.status = :status")
+    long countByStatus(@Param("status") ReservationStatus status);
+
+    @Query("select count(r) from Reservation r where r.branchId = :branchId and r.status = :status")
+    long countByBranchIdAndStatus(@Param("branchId") Long branchId, @Param("status") ReservationStatus status);
+
+    @Query("select r.currencyCode as currencyCode, count(r) as count from Reservation r "
+            + "where r.status <> com.fptis.intern.server.domain.reservation.ReservationStatus.PENDING_PAYMENT "
+            + "group by r.currencyCode order by count(r) desc")
+    List<CurrencyCountProjection> findPopularCurrencies(Pageable pageable);
+
+    @Query("select r.currencyCode as currencyCode, count(r) as count from Reservation r "
+            + "where r.branchId = :branchId and r.status <> com.fptis.intern.server.domain.reservation.ReservationStatus.PENDING_PAYMENT "
+            + "group by r.currencyCode order by count(r) desc")
+    List<CurrencyCountProjection> findPopularCurrenciesByBranch(@Param("branchId") Long branchId, Pageable pageable);
+
+    @Query("select r from Reservation r where r.status <> com.fptis.intern.server.domain.reservation.ReservationStatus.PENDING_PAYMENT "
+            + "order by r.createdAt desc")
+    List<Reservation> findRecentReservations(Pageable pageable);
+
+    @Query("select r from Reservation r where r.branchId = :branchId and r.status <> com.fptis.intern.server.domain.reservation.ReservationStatus.PENDING_PAYMENT "
+            + "order by r.createdAt desc")
+    List<Reservation> findRecentReservationsByBranch(@Param("branchId") Long branchId, Pageable pageable);
+
+    @Query("select r from Reservation r where r.branchId = :branchId and r.status in :statuses "
+            + "and (:q is null or r.reservationNumber like %:q% or exists ("
+            + "select 1 from User u where u.id = r.userId and lower(u.name) like lower(concat('%', :q, '%'))))")
+    Page<Reservation> findBranchReservations(@Param("branchId") Long branchId,
+                                              @Param("statuses") List<ReservationStatus> statuses,
+                                              @Param("q") String q, Pageable pageable);
+
+    @Query("select r from Reservation r where r.branchId = :branchId and r.qrToken = :qrToken")
+    Optional<Reservation> findByBranchIdAndQrToken(@Param("branchId") Long branchId, @Param("qrToken") String qrToken);
+
+    interface CurrencyCountProjection {
+        String getCurrencyCode();
+        long getCount();
+    }
 }

@@ -2,9 +2,17 @@ package com.fptis.intern.server.presentation.branch;
 
 import com.fptis.intern.server.application.branch.BranchAdminService;
 import com.fptis.intern.server.application.branch.BranchService;
+import com.fptis.intern.server.domain.user.Role;
+import com.fptis.intern.server.domain.user.User;
+import com.fptis.intern.server.domain.user.UserRepository;
 import com.fptis.intern.server.global.annotation.RequireAuth;
+import com.fptis.intern.server.global.annotation.UserId;
 import com.fptis.intern.server.global.exception.ApiResponse;
+import com.fptis.intern.server.global.exception.BusinessErrorCode;
+import com.fptis.intern.server.global.exception.BusinessException;
 import com.fptis.intern.server.presentation.branch.dto.BranchCreateRequest;
+import com.fptis.intern.server.presentation.branch.dto.BranchInventoryBulkUpdateRequest;
+import com.fptis.intern.server.presentation.branch.dto.BranchRateBulkUpdateRequest;
 import com.fptis.intern.server.presentation.branch.dto.BranchRateUpdateRequest;
 import com.fptis.intern.server.presentation.branch.dto.BranchUpdateRequest;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,7 +21,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -21,11 +28,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.time.LocalDate;
 
 @Tag(name = "Branch Admin", description = "지점 관리자용 API (ADMIN / BRANCH_ADMIN 권한 필요)")
 @SecurityRequirement(name = "bearerAuth")
@@ -36,11 +40,7 @@ public class BranchAdminController {
 
     private final BranchService branchService;
     private final BranchAdminService branchAdminService;
-
-    // TODO: Auth 연동 완료 후 SecurityContext(JwtToken 등)에서 실제 접속 직원의 소속 지점 ID를 추출하도록 변경
-    private Long extractTokenBranchId() {
-        return 1L; // 임시 하드코딩
-    }
+    private final UserRepository userRepository;
 
     @Operation(summary = "지점 등록", description = "새 지점을 등록합니다. ADMIN 권한이 필요합니다.")
     @RequireAuth(roles = "ADMIN")
@@ -65,14 +65,44 @@ public class BranchAdminController {
         return ApiResponse.success(branchService.updateBranchRate(id, request));
     }
 
-    @Operation(summary = "지점 예약 목록 조회", description = "지점의 특정 날짜 예약 목록을 조회합니다. BRANCH_ADMIN 또는 ADMIN 권한이 필요합니다.")
-    @RequireAuth(roles = {"BRANCH_ADMIN", "ADMIN"})
-    @GetMapping("/{id}/reservations")
-    public ApiResponse<?> getReservations(
-            @Parameter(description = "지점 ID") @PathVariable Long id,
-            @Parameter(description = "조회할 예약 날짜 (yyyy-MM-dd)") @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+    @Operation(summary = "지점 환율 조회", description = "지점의 통화별 Buy/Sell(전역)/Fee(지점별)를 조회합니다.")
+    @RequireAuth(roles = {"ADMIN", "BRANCH_ADMIN"})
+    @GetMapping("/{id}/rates")
+    public ApiResponse<?> getRates(@UserId Long userId, @PathVariable Long id) {
+        assertBranchAccess(userId, id);
+        return ApiResponse.success(branchAdminService.getRates(id));
+    }
 
-        Long tokenBranchId = extractTokenBranchId();
-        return ApiResponse.success(branchAdminService.getReservations(id, tokenBranchId, date));
+    @Operation(summary = "지점 환율 저장", description = "지점의 통화별 Fee(우대율)를 일괄 저장합니다. Buy/Sell은 이 API로 변경할 수 없습니다.")
+    @RequireAuth(roles = {"ADMIN", "BRANCH_ADMIN"})
+    @PatchMapping("/{id}/rates")
+    public ApiResponse<?> updateRates(@UserId Long userId, @PathVariable Long id,
+                                       @Valid @RequestBody BranchRateBulkUpdateRequest request) {
+        assertBranchAccess(userId, id);
+        return ApiResponse.success(branchAdminService.updateRates(id, request));
+    }
+
+    @Operation(summary = "지점 재고 조회", description = "지점의 통화별 재고를 조회합니다.")
+    @RequireAuth(roles = {"ADMIN", "BRANCH_ADMIN"})
+    @GetMapping("/{id}/inventory")
+    public ApiResponse<?> getInventory(@UserId Long userId, @PathVariable Long id) {
+        assertBranchAccess(userId, id);
+        return ApiResponse.success(branchAdminService.getInventory(id));
+    }
+
+    @Operation(summary = "지점 재고 조정", description = "지점의 통화별 재고를 일괄 조정합니다.")
+    @RequireAuth(roles = {"ADMIN", "BRANCH_ADMIN"})
+    @PatchMapping("/{id}/inventory")
+    public ApiResponse<?> updateInventory(@UserId Long userId, @PathVariable Long id,
+                                           @Valid @RequestBody BranchInventoryBulkUpdateRequest request) {
+        assertBranchAccess(userId, id);
+        return ApiResponse.success(branchAdminService.updateInventory(id, request));
+    }
+
+    private void assertBranchAccess(Long userId, Long pathBranchId) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new BusinessException(BusinessErrorCode.UNAUTHORIZED));
+        if (user.getRole() == Role.BRANCH_ADMIN && !pathBranchId.equals(user.getBranchId())) {
+            throw new BusinessException(BusinessErrorCode.NOT_YOUR_BRANCH);
+        }
     }
 }

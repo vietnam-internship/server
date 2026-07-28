@@ -1,5 +1,6 @@
 package com.fptis.intern.server.presentation.auth;
 
+import com.fptis.intern.server.application.auth.AdminAuthService;
 import com.fptis.intern.server.application.auth.GoogleAuthService;
 import com.fptis.intern.server.application.auth.GoogleAuthorizationCodeExchanger;
 import com.fptis.intern.server.application.auth.LoginResult;
@@ -13,13 +14,16 @@ import com.fptis.intern.server.global.exception.BusinessErrorCode;
 import com.fptis.intern.server.global.exception.BusinessException;
 import com.fptis.intern.server.global.util.CookieUtil;
 import com.fptis.intern.server.global.util.JwtProvider;
+import com.fptis.intern.server.presentation.auth.dto.AdminLoginRequest;
 import com.fptis.intern.server.presentation.auth.dto.GoogleLoginResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,6 +40,7 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final GoogleAuthService googleAuthService;
     private final GoogleAuthorizationCodeExchanger googleAuthorizationCodeExchanger;
+    private final AdminAuthService adminAuthService;
 
     /**
      * 프론트 AuthCallbackPage가 자기 URL에서 code/state를 받아 state를 검증한 뒤 호출하는 엔드포인트.
@@ -50,6 +55,14 @@ public class AuthController {
         cookieUtil.addRefreshTokenCookie(response, result.refreshToken(), RefreshTokenService.REFRESH_TOKEN_EXPIRE_TIME);
 
         return GoogleLoginResponse.of(result, jwtProvider.getAccessTokenExpireTime());
+    }
+
+    @PublicApi
+    @PostMapping("/admin/login")
+    public ApiResponse<?> adminLogin(@Valid @RequestBody AdminLoginRequest request, HttpServletResponse response) {
+        LoginResult result = adminAuthService.loginWithPassword(request.email(), request.password());
+        cookieUtil.addRefreshTokenCookie(response, result.refreshToken(), RefreshTokenService.REFRESH_TOKEN_EXPIRE_TIME);
+        return ApiResponse.success(GoogleLoginResponse.of(result, jwtProvider.getAccessTokenExpireTime()));
     }
 
     @PublicApi
