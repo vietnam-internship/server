@@ -78,14 +78,38 @@ public class CurrencyService {
 
     /**
      * 환전 타이밍 AI 추천 정보 조회
+     * 7일 이평선(MA7) 기준으로 현재 환율 위치를 판단해 signal을 결정한다.
+     * - history < 7일: COLLECTING_DATA
+     * - currentRate > MA7 × 1.005: WAIT (평균보다 비쌈)
+     * - currentRate < MA7 × 0.995: NOW (평균보다 쌈)
+     * - 그 외: NEUTRAL
      */
     public TimingRecommendation getTimingRecommendation(String code) {
         Currency currency = currencyRepository.findByCode(code.toUpperCase())
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.CURRENCY_NOT_FOUND));
 
-        // TODO: AI_RECOMMENDATION 테이블 조회 로직 추가 필요. 현재는 MVP 임시 응답 (NEUTRAL)
+        LocalDate startDate = LocalDate.now().minusDays(7);
+        List<ExchangeRateHistory> history = historyRepository
+                .findByCurrencyIdAndRecordedAtGreaterThanEqualOrderByRecordedAtAsc(currency.getId(), startDate);
+
         boolean highVolatility = calculateHighVolatility(currency);
-        return TimingRecommendation.of(currency.getCode(), "NEUTRAL", currency.getBuyRate(), null, highVolatility);
+        double currentRate = currency.getBuyRate();
+
+        double ma7 = history.stream()
+                .mapToDouble(ExchangeRateHistory::getRate)
+                .average()
+                .orElse(currentRate);
+
+        String signal;
+        if (currentRate > ma7 * 1.005) {
+            signal = "WAIT";
+        } else if (currentRate < ma7 * 0.995) {
+            signal = "NOW";
+        } else {
+            signal = "NEUTRAL";
+        }
+
+        return TimingRecommendation.of(currency.getCode(), signal, currentRate, null, highVolatility);
     }
 
     /**
