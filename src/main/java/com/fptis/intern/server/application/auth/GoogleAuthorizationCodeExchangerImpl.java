@@ -3,6 +3,7 @@ package com.fptis.intern.server.application.auth;
 import com.fptis.intern.server.global.config.GoogleOAuthProperties;
 import com.fptis.intern.server.global.exception.BusinessErrorCode;
 import com.fptis.intern.server.global.exception.BusinessException;
+import com.google.api.client.auth.oauth2.TokenResponseException;
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeTokenRequest;
 import com.google.api.client.googleapis.auth.oauth2.GoogleTokenResponse;
 import com.google.api.client.http.javanet.NetHttpTransport;
@@ -36,6 +37,11 @@ public class GoogleAuthorizationCodeExchangerImpl implements GoogleAuthorization
                 throw new BusinessException(BusinessErrorCode.INVALID_GOOGLE_TOKEN);
             }
             return idToken;
+        } catch (TokenResponseException e) {
+            log.warn("[GoogleAuthorizationCodeExchanger] code exchange failed: {} - {}",
+                    e.getDetails() != null ? e.getDetails().getError() : e.getStatusCode(),
+                    e.getDetails() != null ? e.getDetails().getErrorDescription() : e.getMessage());
+            throw new BusinessException(BusinessErrorCode.INVALID_GOOGLE_TOKEN);
         } catch (IOException e) {
             log.warn("[GoogleAuthorizationCodeExchanger] code exchange failed: {}", e.getMessage());
             throw new BusinessException(BusinessErrorCode.INVALID_GOOGLE_TOKEN);
