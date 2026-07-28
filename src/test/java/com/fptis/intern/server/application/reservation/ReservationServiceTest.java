@@ -119,12 +119,18 @@ class ReservationServiceTest {
                 .reservationOnlyStock(1000)
                 .build());
 
-        currencyRepository.save(Currency.builder()
-                .code("USD")
-                .country("미국")
-                .buyRate(1370.0)
-                .sellRate(1400.0)
-                .build());
+        saveCurrency("USD", "미국", 1370.0, 1400.0);
+    }
+
+    /**
+     * V14 시드 마이그레이션이 USD 등 일부 통화를 이미 넣어두므로, 존재하면 테스트가 기대하는
+     * 환율로 갱신하고 없으면 새로 만든다 — 시드 데이터 유무와 무관하게 결정적으로 동작해야 한다.
+     */
+    private Currency saveCurrency(String code, String country, double buyRate, double sellRate) {
+        Currency currency = currencyRepository.findByCode(code)
+                .orElseGet(() -> Currency.builder().code(code).country(country).buyRate(buyRate).sellRate(sellRate).build());
+        currency.updateRates(buyRate, sellRate);
+        return currencyRepository.save(currency);
     }
 
     private ReservationCreateRequest createRequest(LocalDate pickupDate, String pickupTime) {
@@ -205,12 +211,7 @@ class ReservationServiceTest {
 
     @Test
     void rejectsWhenAmountBelowVndMinimum() {
-        currencyRepository.save(Currency.builder()
-                .code("VND")
-                .country("베트남")
-                .buyRate(0.053)
-                .sellRate(0.055)
-                .build());
+        saveCurrency("VND", "베트남", 0.053, 0.055);
         // VND 10,000 * 0.055 = 550 KRW 미만이어야 하므로, USD 0.1 * 1400 = 140 KRW로 요청한다.
         assertThatThrownBy(() -> reservationService.createReservation(
                 verifiedUser.getId(), createRequest(LocalDate.now().plusDays(1), "10:30", 0.1)))

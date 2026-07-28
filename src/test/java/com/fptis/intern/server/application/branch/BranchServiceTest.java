@@ -54,12 +54,18 @@ class BranchServiceTest {
 
     @BeforeEach
     void setUp() {
-        currencyRepository.save(Currency.builder()
-                .code("USD")
-                .country("미국")
-                .buyRate(1370.0)
-                .sellRate(1400.0)
-                .build());
+        saveCurrency("USD", "미국", 1370.0, 1400.0);
+    }
+
+    /**
+     * V14 시드 마이그레이션이 USD 등 일부 통화를 이미 넣어두므로, 존재하면 테스트가 기대하는
+     * 환율로 갱신하고 없으면 새로 만든다 — 시드 데이터 유무와 무관하게 결정적으로 동작해야 한다.
+     */
+    private Currency saveCurrency(String code, String country, double buyRate, double sellRate) {
+        Currency currency = currencyRepository.findByCode(code)
+                .orElseGet(() -> Currency.builder().code(code).country(country).buyRate(buyRate).sellRate(sellRate).build());
+        currency.updateRates(buyRate, sellRate);
+        return currencyRepository.save(currency);
     }
 
     private Branch saveBranch(String name, double latitude, double longitude) {
@@ -111,12 +117,7 @@ class BranchServiceTest {
 
     @Test
     void getBranchComputesFinalRatePerCurrency() {
-        Currency jpy = currencyRepository.save(Currency.builder()
-                .code("JPY")
-                .country("일본")
-                .buyRate(8.8)
-                .sellRate(9.2)
-                .build());
+        Currency jpy = saveCurrency("JPY", "일본", 8.8, 9.2);
 
         Branch branch = saveBranch("명동 환전센터", 37.5665, 126.9780);
         saveRate(branch, "USD", 1.0); // 1400 * 0.99 = 1386.0
