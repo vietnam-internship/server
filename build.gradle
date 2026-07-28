@@ -67,6 +67,9 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 
+    // Password hashing for admin email+password login (BCrypt only — no full Spring Security filter chain)
+    implementation 'org.springframework.security:spring-security-crypto'
+
 
     //monitoring
     implementation 'org.springframework.boot:spring-boot-starter-actuator'

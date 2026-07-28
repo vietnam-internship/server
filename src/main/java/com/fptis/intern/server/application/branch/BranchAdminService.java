@@ -1,38 +1,92 @@
 package com.fptis.intern.server.application.branch;
 
-import com.fptis.intern.server.presentation.branch.dto.BranchReservationListResponse;
+import com.fptis.intern.server.domain.branch.Branch;
+import com.fptis.intern.server.domain.branch.BranchCurrencyRate;
+import com.fptis.intern.server.domain.branch.BranchCurrencyRateRepository;
+import com.fptis.intern.server.domain.branch.BranchRepository;
+import com.fptis.intern.server.domain.currency.Currency;
+import com.fptis.intern.server.domain.currency.CurrencyRepository;
+import com.fptis.intern.server.global.exception.BusinessErrorCode;
+import com.fptis.intern.server.global.exception.BusinessException;
+import com.fptis.intern.server.presentation.branch.dto.BranchInventoryBulkUpdateRequest;
+import com.fptis.intern.server.presentation.branch.dto.BranchInventoryItem;
+import com.fptis.intern.server.presentation.branch.dto.BranchInventoryResponse;
+import com.fptis.intern.server.presentation.branch.dto.BranchRateAdminItem;
+import com.fptis.intern.server.presentation.branch.dto.BranchRateAdminResponse;
+import com.fptis.intern.server.presentation.branch.dto.BranchRateBulkUpdateRequest;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDate;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class BranchAdminService {
 
-    // private final ReservationRepository reservationRepository; // TODO: Reservation 도메인 작업 시 주석 해제
+    private final BranchCurrencyRateRepository branchCurrencyRateRepository;
+    private final CurrencyRepository currencyRepository;
+    private final BranchRepository branchRepository;
 
-    public BranchReservationListResponse getReservations(Long pathBranchId, Long tokenBranchId, LocalDate date) {
-        verifyBranchAccess(pathBranchId, tokenBranchId);
+    public List<BranchRateAdminResponse> getRates(Long branchId) {
+        getBranchOrThrow(branchId);
+        List<BranchCurrencyRate> rates = branchCurrencyRateRepository.findRatesByBranch(branchId);
+        Map<String, Currency> currencyByCode = currencyRepository
+                .findByCodeIn(rates.stream().map(BranchCurrencyRate::getCurrencyCode).distinct().toList())
+                .stream().collect(Collectors.toMap(Currency::getCode, Function.identity()));
 
-        // TODO: Reservation 도메인 구현 후 실제 DB 조회 및 변환 로직으로 교체
-        // List<Reservation> reservations = reservationRepository.find...
-        // return BranchReservationListResponse.from(reservations.stream().map(...).toList());
-        
-        return BranchReservationListResponse.from(List.of());
+        return rates.stream()
+                .map(rate -> {
+                    Currency currency = currencyByCode.get(rate.getCurrencyCode());
+                    return new BranchRateAdminResponse(rate.getCurrencyCode(),
+                            currency != null ? currency.getBuyRate() : null,
+                            currency != null ? currency.getSellRate() : null,
+                            rate.getPreferentialRate());
+                })
+                .toList();
     }
 
-    /**
-     * BOLA(Broken Object Level Authorization) 방어 로직.
-     * 로그인한 사용자가 속한 지점(tokenBranchId)과 요청한 지점(pathBranchId)이 다르면 예외를 발생시킵니다.
-     * 시스템 관리자(ADMIN)의 경우 tokenBranchId가 null이거나 0이 들어올 수 있으므로 패스 처리합니다.
-     */
-    private void verifyBranchAccess(Long pathBranchId, Long tokenBranchId) {
-        if (tokenBranchId != null && tokenBranchId > 0 && !tokenBranchId.equals(pathBranchId)) {
-            throw new IllegalArgumentException("본인이 소속된 지점의 데이터만 접근할 수 있습니다."); 
+    @Transactional
+    public List<BranchRateAdminResponse> updateRates(Long branchId, BranchRateBulkUpdateRequest request) {
+        getBranchOrThrow(branchId);
+        for (BranchRateAdminItem item : request.rates()) {
+            BranchCurrencyRate rate = findOrInitRate(branchId, item.currencyCode());
+            rate.update(item.feePercent(), null);
+            branchCurrencyRateRepository.save(rate);
         }
+        return getRates(branchId);
+    }
+
+    public List<BranchInventoryResponse> getInventory(Long branchId) {
+        getBranchOrThrow(branchId);
+        return branchCurrencyRateRepository.findRatesByBranch(branchId).stream()
+                .map(rate -> new BranchInventoryResponse(rate.getCurrencyCode(), rate.getReservationOnlyStock(), false))
+                .toList();
+    }
+
+    @Transactional
+    public List<BranchInventoryResponse> updateInventory(Long branchId, BranchInventoryBulkUpdateRequest request) {
+        getBranchOrThrow(branchId);
+        for (BranchInventoryItem item : request.items()) {
+            BranchCurrencyRate rate = findOrInitRate(branchId, item.currencyCode());
+            rate.update(null, item.stock());
+            branchCurrencyRateRepository.save(rate);
+        }
+        return getInventory(branchId);
+    }
+
+    private BranchCurrencyRate findOrInitRate(Long branchId, String currencyCode) {
+        return branchCurrencyRateRepository.findRate(branchId, currencyCode)
+                .orElseGet(() -> BranchCurrencyRate.builder()
+                        .branchId(branchId).currencyCode(currencyCode)
+                        .preferentialRate(0).reservationOnlyStock(0).build());
+    }
+
+    private Branch getBranchOrThrow(Long id) {
+        return branchRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(BusinessErrorCode.BRANCH_NOT_FOUND));
     }
 }

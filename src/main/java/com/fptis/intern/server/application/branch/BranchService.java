@@ -111,11 +111,21 @@ public class BranchService {
     @Transactional
     public BranchDetailResponse updateBranch(Long id, BranchUpdateRequest request) {
         Branch branch = getBranchOrThrow(id);
+        String businessHours = request.businessHours() != null
+                ? request.businessHours()
+                : composeBusinessHours(request.openTime(), request.closeTime());
         branch.update(request.name(), request.address(), request.latitude(), request.longitude(), request.phone(),
-                request.businessHours(), request.pickupLocationDetail(), request.timeSlotCapacity(),
+                businessHours, request.pickupLocationDetail(), request.timeSlotCapacity(),
                 request.supportedCurrencies(), request.active());
         List<BranchCurrencyRate> rates = branchCurrencyRateRepository.findRatesByBranch(id);
         return buildDetail(branch, rates);
+    }
+
+    private String composeBusinessHours(String openTime, String closeTime) {
+        if (openTime == null || closeTime == null) {
+            return null;
+        }
+        return "매일 " + openTime + "-" + closeTime;
     }
 
     private BranchSummaryResponse toSummary(Branch branch, List<BranchCurrencyRate> rates, String currencyCode,

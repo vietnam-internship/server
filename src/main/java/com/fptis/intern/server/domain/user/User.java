@@ -49,8 +49,11 @@ public class User extends BaseTimeEntity {
     @Column(name = "phone_verified", nullable = false)
     private boolean phoneVerified;
 
+    @Column(name = "branch_id")
+    private Long branchId;
+
     @Builder
-    private User(String name, String email, String password, String googleId, Role role, String phone) {
+    private User(String name, String email, String password, String googleId, Role role, String phone, Long branchId) {
         this.name = name;
         this.email = email;
         this.password = password;
@@ -58,6 +61,7 @@ public class User extends BaseTimeEntity {
         this.role = role;
         this.phone = phone;
         this.phoneVerified = false;
+        this.branchId = branchId;
     }
 
     public void markPhoneVerified() {

@@ -127,6 +127,21 @@ public class ReservationService {
         // 취소 알림 발송은 Notification 도메인이 없어 생략한다.
     }
 
+    /**
+     * QR Scan 화면의 Reject 버튼 — 지점 창구가 예약을 거절한다. 소유자(owner) 검증 대신
+     * 지점(branchId) 일치 검증으로 인가한다는 점만 cancelReservation과 다르다.
+     */
+    @Transactional
+    public void rejectByBranch(Long branchId, Long reservationId) {
+        Reservation reservation = getReservationOrThrow(reservationId);
+        if (!reservation.getBranchId().equals(branchId)) {
+            throw new BusinessException(BusinessErrorCode.RESERVATION_NOT_FOUND);
+        }
+        reservation.cancel(false);
+        restoreStock(reservation);
+        restoreTimeSlot(reservation);
+    }
+
     @Transactional
     public RedeemResponse redeem(Long branchId, Long reservationId, RedeemRequest request) {
         Reservation reservation = reservationRepository.findById(reservationId)
