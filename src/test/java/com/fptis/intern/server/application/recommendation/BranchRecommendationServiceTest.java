@@ -135,8 +135,7 @@ class BranchRecommendationServiceTest {
     void getRecommendation_returnsCompletedResultsInRankOrder() {
         Branch first  = saveBranch("1순위 지점", 37.5665, 126.9780);
         Branch second = saveBranch("2순위 지점", 37.5666, 126.9781);
-        currencyRepository.save(Currency.builder()
-                .code("USD").country("미국").buyRate(1370.0).sellRate(1400.0).build());
+        saveCurrency("USD", "미국", 1370.0, 1400.0);
         saveRate(first,  "USD", 2.0);  // finalRate = 1400 * 0.98 = 1372.0
         saveRate(second, "USD", 0.5);  // finalRate = 1400 * 0.995 = 1393.0
 
@@ -226,5 +225,16 @@ class BranchRecommendationServiceTest {
                 .preferentialRate(preferentialRate)
                 .reservationOnlyStock(1000)
                 .build());
+    }
+
+    /**
+     * V14 시드 마이그레이션이 USD 등 일부 통화를 이미 넣어두므로, 존재하면 테스트가 기대하는
+     * 환율로 갱신하고 없으면 새로 만든다 — 시드 데이터 유무와 무관하게 결정적으로 동작해야 한다.
+     */
+    private Currency saveCurrency(String code, String country, double buyRate, double sellRate) {
+        Currency currency = currencyRepository.findByCode(code)
+                .orElseGet(() -> Currency.builder().code(code).country(country).buyRate(buyRate).sellRate(sellRate).build());
+        currency.updateRates(buyRate, sellRate);
+        return currencyRepository.save(currency);
     }
 }
