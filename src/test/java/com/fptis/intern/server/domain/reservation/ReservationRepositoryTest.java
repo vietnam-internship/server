@@ -71,6 +71,7 @@ class ReservationRepositoryTest {
                 .pickupDate(LocalDate.now().plusDays(1))
                 .pickupTime(LocalTime.of(10, 30))
                 .now(now)
+                .paymentHoldMinutes(5)
                 .build());
         reservation.assignReservationNumber("TX-20260721-0001");
         reservationRepository.save(reservation);
@@ -91,7 +92,7 @@ class ReservationRepositoryTest {
         assertThat(reservationRepository.findExpiredPendingPayments(ReservationStatus.PENDING_PAYMENT, now.minusMinutes(10)))
                 .isEmpty();
 
-        reservation.confirmPayment(now);
+        reservation.confirmPayment(now, 2);
         reservation.issueQrToken("raw-qr-token");
         reservationRepository.save(reservation);
 

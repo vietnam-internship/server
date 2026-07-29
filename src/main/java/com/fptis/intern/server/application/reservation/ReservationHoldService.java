@@ -8,6 +8,7 @@ import com.fptis.intern.server.domain.branch.BranchTimeSlot;
 import com.fptis.intern.server.domain.branch.BranchTimeSlotRepository;
 import com.fptis.intern.server.domain.reservation.Reservation;
 import com.fptis.intern.server.domain.reservation.ReservationRepository;
+import com.fptis.intern.server.global.config.ReservationTimingProperties;
 import com.fptis.intern.server.global.exception.BusinessErrorCode;
 import com.fptis.intern.server.global.exception.BusinessException;
 import com.fptis.intern.server.presentation.reservation.dto.ReservationCreateRequest;
@@ -35,6 +36,7 @@ public class ReservationHoldService {
     private final BranchRepository branchRepository;
     private final BranchCurrencyRateRepository branchCurrencyRateRepository;
     private final BranchTimeSlotRepository branchTimeSlotRepository;
+    private final ReservationTimingProperties timingProperties;
 
     @Transactional
     public Reservation createHold(Long userId, ReservationCreateRequest request, LocalDateTime now) {
@@ -57,6 +59,7 @@ public class ReservationHoldService {
                 .pickupDate(request.pickupDate())
                 .pickupTime(pickupTime)
                 .now(now)
+                .paymentHoldMinutes(timingProperties.paymentHoldMinutes())
                 .build();
         reservationRepository.save(reservation);
         reservation.assignReservationNumber(generateReservationNumber(reservation.getId(), now));

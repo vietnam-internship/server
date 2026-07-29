@@ -33,7 +33,7 @@ public class CurrencySyncService {
     private String apiUrl;
 
     // 매일 자정 실행 (cron = "초 분 시 일 월 요일")
-    @Scheduled(cron = "0 0 0 * * *")
+    @Scheduled(cron = "${travelx.currency.sync-cron:0 0 0 * * *}")
     @Transactional
     public void syncExchangeRates() {
         log.info("환율 동기화 배치를 시작합니다.");

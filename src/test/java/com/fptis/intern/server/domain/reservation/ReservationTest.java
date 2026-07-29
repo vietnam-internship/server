@@ -21,6 +21,7 @@ class ReservationTest {
                 .pickupDate(LocalDate.of(2026, 7, 22))
                 .pickupTime(LocalTime.of(10, 30))
                 .now(now)
+                .paymentHoldMinutes(5)
                 .build();
     }
 
@@ -42,7 +43,7 @@ class ReservationTest {
         Reservation reservation = newReservation(now);
 
         LocalDateTime confirmedAt = now.plusMinutes(1);
-        reservation.confirmPayment(confirmedAt);
+        reservation.confirmPayment(confirmedAt, 2);
 
         assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.RESERVED);
         assertThat(reservation.getExpiresAt()).isEqualTo(confirmedAt.plusHours(2));
@@ -53,9 +54,9 @@ class ReservationTest {
     @Test
     void confirmPaymentTwiceThrowsPaymentNotPending() {
         Reservation reservation = newReservation(LocalDateTime.now());
-        reservation.confirmPayment(LocalDateTime.now());
+        reservation.confirmPayment(LocalDateTime.now(), 2);
 
-        assertThatThrownBy(() -> reservation.confirmPayment(LocalDateTime.now()))
+        assertThatThrownBy(() -> reservation.confirmPayment(LocalDateTime.now(), 2))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(BusinessErrorCode.PAYMENT_NOT_PENDING);
@@ -73,7 +74,7 @@ class ReservationTest {
     @Test
     void expireHoldAfterConfirmThrowsPaymentNotPending() {
         Reservation reservation = newReservation(LocalDateTime.now());
-        reservation.confirmPayment(LocalDateTime.now());
+        reservation.confirmPayment(LocalDateTime.now(), 2);
 
         assertThatThrownBy(reservation::expireHold)
                 .isInstanceOf(BusinessException.class)
@@ -84,7 +85,7 @@ class ReservationTest {
     @Test
     void cancelClearsQrTokenAndMarksAutoExpiredWhenRequested() {
         Reservation reservation = newReservation(LocalDateTime.now());
-        reservation.confirmPayment(LocalDateTime.now());
+        reservation.confirmPayment(LocalDateTime.now(), 2);
         reservation.issueQrToken("raw-token");
 
         reservation.cancel(true);
@@ -108,7 +109,7 @@ class ReservationTest {
     @Test
     void cancelAfterCompleteThrowsAlreadyCompleted() {
         Reservation reservation = newReservation(LocalDateTime.now());
-        reservation.confirmPayment(LocalDateTime.now());
+        reservation.confirmPayment(LocalDateTime.now(), 2);
         reservation.complete(LocalDateTime.now());
 
         assertThatThrownBy(() -> reservation.cancel(false))
@@ -131,7 +132,7 @@ class ReservationTest {
     @Test
     void completeClearsQrToken() {
         Reservation reservation = newReservation(LocalDateTime.now());
-        reservation.confirmPayment(LocalDateTime.now());
+        reservation.confirmPayment(LocalDateTime.now(), 2);
         reservation.issueQrToken("raw-token");
         LocalDateTime pickedUpAt = LocalDateTime.now();
 
