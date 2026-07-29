@@ -27,15 +27,18 @@ public class AiRecommendationClient {
                 sessionId, latitude, longitude, radiusKm, currencyCode, amount
         );
 
+        log.info("[AI 클라이언트] POST {} — sessionId={}, currency={}, amount={}, lat={}, lng={}, radiusKm={}",
+                BRANCH_RANKING_PATH, sessionId, currencyCode, amount, latitude, longitude, radiusKm);
+
         aiWebClient.post()
                 .uri(BRANCH_RANKING_PATH)
                 .bodyValue(request)
                 .retrieve()
                 .toBodilessEntity()
                 .subscribe(
-                        response -> log.debug("AI 추천 연산 요청 전송 완료, sessionId={}", sessionId),
+                        response -> log.info("[AI 클라이언트] 요청 성공, sessionId={}", sessionId),
                         error -> {
-                            log.warn("AI 추천 연산 요청 실패, sessionId={}: {}", sessionId, error.getMessage());
+                            log.warn("[AI 클라이언트] 요청 실패, sessionId={}: {}", sessionId, error.getMessage());
                             recommendationRepository.findById(sessionId).ifPresent(session -> {
                                 session.fail();
                                 recommendationRepository.save(session);

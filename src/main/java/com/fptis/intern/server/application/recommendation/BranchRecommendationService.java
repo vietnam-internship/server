@@ -30,9 +30,11 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -51,6 +53,10 @@ public class BranchRecommendationService {
 
     @Transactional
     public Long createRecommendation(BranchRecommendationCreateRequest request, Long userId) {
+        log.info("[추천 요청] userId={}, currency={}, amount={}, lat={}, lng={}, radiusKm={}",
+                userId, request.currency(), request.amount(),
+                request.latitude(), request.longitude(), request.radiusKm());
+
         BranchRecommendation session = BranchRecommendation.builder()
                 .userId(userId)
                 .currency(request.currency().toUpperCase())
@@ -60,17 +66,21 @@ public class BranchRecommendationService {
                 .radiusKm(request.radiusKm())
                 .build();
         recommendationRepository.save(session);
+        log.info("[추천 세션 생성] sessionId={}", session.getId());
 
         aiRecommendationClient.triggerBranchRanking(
                 session.getId(), session.getLatitude(), session.getLongitude(),
                 session.getRadiusKm(), session.getCurrency(), session.getAmount()
         );
+        log.info("[AI 요청 전송] sessionId={} → AI 서버로 랭킹 연산 요청", session.getId());
 
         return session.getId();
     }
 
     @Transactional
     public void receiveAiResult(BranchRecommendationPushRequest request) {
+        log.info("[AI 결과 수신] sessionId={}, 랭킹 지점 수={}", request.sessionId(), request.rankedBranches().size());
+
         BranchRecommendation session = getSessionOrThrow(request.sessionId());
 
         List<BranchRecommendationItem> items = request.rankedBranches().stream()
@@ -78,12 +88,15 @@ public class BranchRecommendationService {
                 .toList();
         itemRepository.saveAll(items);
         session.complete();
+        log.info("[추천 세션 완료] sessionId={}, 저장된 아이템 수={}", session.getId(), items.size());
     }
 
     public BranchRecommendationQueryResponse getRecommendation(Long sessionId) {
+        log.info("[추천 결과 조회] sessionId={}", sessionId);
         BranchRecommendation session = getSessionOrThrow(sessionId);
 
         if (session.getStatus() != RecommendationStatus.COMPLETED) {
+            log.info("[추천 결과 조회] sessionId={}, 아직 미완료 status={}", sessionId, session.getStatus());
             return BranchRecommendationQueryResponse.of(session.getStatus().name(), List.of());
         }
 
