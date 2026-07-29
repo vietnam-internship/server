@@ -3,7 +3,7 @@ package com.fptis.intern.server.presentation.auth.dto;
 import com.fptis.intern.server.domain.user.User;
 
 public record UserSummaryResponse(Long id, String name, String email, String phone, boolean phoneVerified,
-                                   String role) {
+                                   String role, Long branchId) {
 
     public static UserSummaryResponse from(User user) {
         return new UserSummaryResponse(
@@ -12,6 +12,7 @@ public record UserSummaryResponse(Long id, String name, String email, String pho
                 user.getEmail(),
                 user.getPhone(),
                 user.isPhoneVerified(),
-                user.getRole().name());
+                user.getRole().name(),
+                user.getBranchId());
     }
 }
