@@ -7,6 +7,7 @@ import com.fptis.intern.server.domain.payment.PaymentStatus;
 import com.fptis.intern.server.domain.reservation.Reservation;
 import com.fptis.intern.server.domain.reservation.ReservationRepository;
 import com.fptis.intern.server.domain.reservation.ReservationStatus;
+import com.fptis.intern.server.global.config.ReservationTimingProperties;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
@@ -34,6 +35,7 @@ public class PaymentService {
     private final ReservationRepository reservationRepository;
     private final PaymentRepository paymentRepository;
     private final PaymentGateway paymentGateway;
+    private final ReservationTimingProperties timingProperties;
 
     /**
      * 예약 홀드가 커밋되어 재고/슬롯 락이 이미 풀린 뒤에만 호출해야 한다 — Stripe PaymentIntent
@@ -98,7 +100,7 @@ public class PaymentService {
         }
 
         payment.markApproved(now);
-        reservation.confirmPayment(now);
+        reservation.confirmPayment(now, timingProperties.pickupHoldHours());
         reservation.issueQrToken(generateQrToken());
     }
 

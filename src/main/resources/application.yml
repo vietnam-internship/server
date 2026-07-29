@@ -2,7 +2,7 @@ server:
   port: ${SPRING_PORT:8080}
   servlet:
     session:
-      timeout: 1800
+      timeout: ${SESSION_TIMEOUT_SECONDS:1800}
       cookie:
         secure: true
         same-site: strict
@@ -76,6 +76,18 @@ travelx:
   exchange-rate:
     key: ${EXCHANGERATE_API_KEY}
     url: ${EXCHANGERATE_API_URL}
+  reservation:
+    # discussion#16 결제 대기(PENDING_PAYMENT) 홀드 TTL — 이 안에 결제 승인이 안 오면 EXPIRED.
+    payment-hold-minutes: ${RESERVATION_PAYMENT_HOLD_MINUTES:5}
+    # 결제 승인 후 픽업 마감까지의 홀드 TTL.
+    pickup-hold-hours: ${RESERVATION_PICKUP_HOLD_HOURS:2}
+    # ReservationExpirySweeper가 위 두 TTL 만료 건을 정리하러 도는 주기(ms).
+    expiry-sweep-interval-ms: ${RESERVATION_EXPIRY_SWEEP_INTERVAL_MS:60000}
+  jwt:
+    access-token-expire-minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:30}
+    refresh-token-expire-days: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:14}
+  currency:
+    sync-cron: "${CURRENCY_SYNC_CRON:0 0 0 * * *}"
 
 
 springdoc:

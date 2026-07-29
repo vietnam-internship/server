@@ -15,7 +15,7 @@ public class ReservationExpirySweeper {
 
     private final ReservationService reservationService;
 
-    @Scheduled(fixedDelay = 60_000)
+    @Scheduled(fixedDelayString = "${travelx.reservation.expiry-sweep-interval-ms:60000}")
     public void sweep() {
         reservationService.expireOverdueReservations();
         reservationService.expireOverduePendingPayments();

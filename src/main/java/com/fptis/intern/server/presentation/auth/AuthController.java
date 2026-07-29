@@ -52,7 +52,7 @@ public class AuthController {
         String idToken = googleAuthorizationCodeExchanger.exchangeForIdToken(code);
         LoginResult result = googleAuthService.loginWithGoogle(idToken);
 
-        cookieUtil.addRefreshTokenCookie(response, result.refreshToken(), RefreshTokenService.REFRESH_TOKEN_EXPIRE_TIME);
+        cookieUtil.addRefreshTokenCookie(response, result.refreshToken(), refreshTokenService.getRefreshTokenExpireTimeMillis());
 
         return GoogleLoginResponse.of(result, jwtProvider.getAccessTokenExpireTime());
     }
@@ -61,7 +61,7 @@ public class AuthController {
     @PostMapping("/admin/login")
     public ApiResponse<?> adminLogin(@Valid @RequestBody AdminLoginRequest request, HttpServletResponse response) {
         LoginResult result = adminAuthService.loginWithPassword(request.email(), request.password());
-        cookieUtil.addRefreshTokenCookie(response, result.refreshToken(), RefreshTokenService.REFRESH_TOKEN_EXPIRE_TIME);
+        cookieUtil.addRefreshTokenCookie(response, result.refreshToken(), refreshTokenService.getRefreshTokenExpireTimeMillis());
         return ApiResponse.success(GoogleLoginResponse.of(result, jwtProvider.getAccessTokenExpireTime()));
     }
 
@@ -86,7 +86,7 @@ public class AuthController {
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.UNAUTHORIZED));
 
         String newAccessToken = jwtProvider.createAccessToken(user.getId(), user.getRole());
-        cookieUtil.addRefreshTokenCookie(response, rotated.rawToken(), RefreshTokenService.REFRESH_TOKEN_EXPIRE_TIME);
+        cookieUtil.addRefreshTokenCookie(response, rotated.rawToken(), refreshTokenService.getRefreshTokenExpireTimeMillis());
 
         log.debug("[AuthController] reissued tokens for userId={}", user.getId());
         return ApiResponse.success(GoogleLoginResponse.of(

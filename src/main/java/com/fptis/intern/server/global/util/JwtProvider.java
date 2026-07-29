@@ -1,6 +1,7 @@
 package com.fptis.intern.server.global.util;
 
 import com.fptis.intern.server.domain.user.Role;
+import com.fptis.intern.server.global.config.JwtProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -8,16 +9,19 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.util.Date;
 import javax.crypto.SecretKey;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class JwtProvider {
 
-    private static final long ACCESS_TOKEN_EXPIRE_TIME = 30 * 60 * 1000L;
     private static final String CLAIM_ROLE = "role";
+
+    private final JwtProperties jwtProperties;
 
     @Value("${JWT_SECRET}")
     private String secret;
@@ -28,7 +32,7 @@ public class JwtProvider {
 
     public String createAccessToken(Long userId, Role role) {
         Date now = new Date();
-        Date expiry = new Date(now.getTime() + ACCESS_TOKEN_EXPIRE_TIME);
+        Date expiry = new Date(now.getTime() + getAccessTokenExpireTime());
 
         return Jwts.builder()
                 .subject(String.valueOf(userId))
@@ -65,6 +69,6 @@ public class JwtProvider {
     }
 
     public long getAccessTokenExpireTime() {
-        return ACCESS_TOKEN_EXPIRE_TIME;
+        return jwtProperties.accessTokenExpireMinutes() * 60_000L;
     }
 }

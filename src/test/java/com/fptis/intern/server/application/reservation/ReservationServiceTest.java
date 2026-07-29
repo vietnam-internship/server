@@ -21,6 +21,7 @@ import com.fptis.intern.server.domain.reservation.ReservationRepository;
 import com.fptis.intern.server.domain.reservation.ReservationStatus;
 import com.fptis.intern.server.domain.user.Role;
 import com.fptis.intern.server.domain.user.User;
+import com.fptis.intern.server.global.config.ReservationTimingProperties;
 import com.fptis.intern.server.domain.user.UserRepository;
 import com.fptis.intern.server.global.exception.BusinessErrorCode;
 import com.fptis.intern.server.global.exception.BusinessException;
@@ -88,9 +89,11 @@ class ReservationServiceTest {
 
     @BeforeEach
     void setUp() {
+        ReservationTimingProperties timingProperties = new ReservationTimingProperties(5, 2);
         ReservationHoldService reservationHoldService = new ReservationHoldService(reservationRepository,
-                branchRepository, branchCurrencyRateRepository, branchTimeSlotRepository);
-        paymentService = new PaymentService(reservationRepository, paymentRepository, new FakePaymentGateway());
+                branchRepository, branchCurrencyRateRepository, branchTimeSlotRepository, timingProperties);
+        paymentService = new PaymentService(reservationRepository, paymentRepository, new FakePaymentGateway(),
+                timingProperties);
         reservationService = new ReservationService(reservationRepository, userRepository, branchRepository,
                 branchCurrencyRateRepository, branchTimeSlotRepository, reservationHoldService, paymentService,
                 currencyRepository);

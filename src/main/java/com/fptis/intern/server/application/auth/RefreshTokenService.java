@@ -3,6 +3,7 @@ package com.fptis.intern.server.application.auth;
 import com.fptis.intern.server.domain.auth.IssuedRefreshToken;
 import com.fptis.intern.server.domain.auth.RefreshToken;
 import com.fptis.intern.server.domain.auth.RefreshTokenRepository;
+import com.fptis.intern.server.global.config.JwtProperties;
 import com.fptis.intern.server.global.exception.BusinessErrorCode;
 import com.fptis.intern.server.global.exception.BusinessException;
 import java.security.MessageDigest;
@@ -26,11 +27,14 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class RefreshTokenService {
 
-    public static final long REFRESH_TOKEN_EXPIRE_TIME = 14 * 24 * 60 * 60 * 1000L;
-
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final RefreshTokenRepository refreshTokenRepository;
+    private final JwtProperties jwtProperties;
+
+    public long getRefreshTokenExpireTimeMillis() {
+        return jwtProperties.refreshTokenExpireDays() * 24L * 60 * 60 * 1000;
+    }
 
     @Transactional
     public IssuedRefreshToken issue(Long userId) {
@@ -39,7 +43,7 @@ public class RefreshTokenService {
         RefreshToken refreshToken = RefreshToken.builder()
                 .userId(userId)
                 .tokenHash(hash(rawToken))
-                .expiresAt(LocalDateTime.now().plus(Duration.ofMillis(REFRESH_TOKEN_EXPIRE_TIME)))
+                .expiresAt(LocalDateTime.now().plus(Duration.ofMillis(getRefreshTokenExpireTimeMillis())))
                 .build();
         refreshTokenRepository.save(refreshToken);
 

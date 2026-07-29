@@ -3,6 +3,7 @@ package com.fptis.intern.server.presentation.payment;
 import com.fptis.intern.server.application.payment.PaymentService;
 import com.fptis.intern.server.global.annotation.PublicApi;
 import com.fptis.intern.server.global.config.StripeProperties;
+import com.stripe.exception.EventDataObjectDeserializationException;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.model.PaymentIntent;
@@ -43,7 +44,20 @@ public class StripeWebhookController {
             return ResponseEntity.badRequest().build();
         }
 
+        // getObject()는 이벤트에 찍힌 API 버전이 SDK 컴파일 버전과 다르면 조용히 empty를 반환한다
+        // (stripe-java의 잘 알려진 동작) — 그러면 결제 승인 이벤트가 와도 아무 처리 없이 200만
+        // 리턴하고 넘어가 버린다. deserializeUnsafe()는 버전 불일치와 무관하게 역직렬화하므로
+        // 폴백으로 사용한다.
         StripeObject stripeObject = event.getDataObjectDeserializer().getObject().orElse(null);
+        if (stripeObject == null) {
+            try {
+                stripeObject = event.getDataObjectDeserializer().deserializeUnsafe();
+            } catch (EventDataObjectDeserializationException e) {
+                log.warn("[StripeWebhookController] 이벤트 역직렬화 실패: type={}, message={}",
+                        event.getType(), e.getMessage());
+                return ResponseEntity.ok().build();
+            }
+        }
         if (stripeObject instanceof PaymentIntent paymentIntent) {
             switch (event.getType()) {
                 case "payment_intent.succeeded" -> paymentService.handlePaymentSucceeded(paymentIntent.getId());

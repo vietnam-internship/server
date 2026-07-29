@@ -31,9 +31,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Reservation extends BaseTimeEntity {
 
-    private static final int PICKUP_HOLD_DURATION_HOURS = 2;
-    private static final int PAYMENT_HOLD_DURATION_MINUTES = 5;
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -67,13 +64,15 @@ public class Reservation extends BaseTimeEntity {
     private Double lockedRate;
 
     /**
-     * 결제 대기(PENDING_PAYMENT) 홀드의 TTL(5분) — 이 시간 안에 결제를 승인받지 못하면 EXPIRED로 풀린다.
+     * 결제 대기(PENDING_PAYMENT) 홀드의 TTL(기본 5분, {@code travelx.reservation.payment-hold-minutes}로
+     * 조정) — 이 시간 안에 결제를 승인받지 못하면 EXPIRED로 풀린다.
      */
     @Column(name = "payment_expires_at")
     private LocalDateTime paymentExpiresAt;
 
     /**
-     * 픽업 마감 시각(2시간) — 결제 승인({@link #confirmPayment}) 시점부터 기산하며, 그 전까지는 null이다.
+     * 픽업 마감 시각(기본 2시간, {@code travelx.reservation.pickup-hold-hours}로 조정) — 결제 승인
+     * ({@link #confirmPayment}) 시점부터 기산하며, 그 전까지는 null이다.
      */
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
@@ -94,7 +93,7 @@ public class Reservation extends BaseTimeEntity {
 
     @Builder
     private Reservation(Long userId, Long branchId, String currencyCode, double amount,
-                         LocalDate pickupDate, LocalTime pickupTime, LocalDateTime now) {
+                         LocalDate pickupDate, LocalTime pickupTime, LocalDateTime now, int paymentHoldMinutes) {
         this.userId = userId;
         this.branchId = branchId;
         this.currencyCode = currencyCode;
@@ -103,7 +102,7 @@ public class Reservation extends BaseTimeEntity {
         this.pickupTime = pickupTime;
         this.status = ReservationStatus.PENDING_PAYMENT;
         this.lockedRate = null;
-        this.paymentExpiresAt = now.plusMinutes(PAYMENT_HOLD_DURATION_MINUTES);
+        this.paymentExpiresAt = now.plusMinutes(paymentHoldMinutes);
         this.autoExpired = false;
     }
 
@@ -135,12 +134,12 @@ public class Reservation extends BaseTimeEntity {
      * 결제 승인 성공 시 호출한다 — 픽업 TTL을 이 시점부터 새로 기산한다. QR 발급은 호출자가
      * {@link #issueQrToken}으로 이어서 처리한다(결제 승인과 QR 발급 책임을 분리).
      */
-    public void confirmPayment(LocalDateTime now) {
+    public void confirmPayment(LocalDateTime now, int pickupHoldHours) {
         if (status != ReservationStatus.PENDING_PAYMENT) {
             throw new BusinessException(BusinessErrorCode.PAYMENT_NOT_PENDING);
         }
         this.status = ReservationStatus.RESERVED;
-        this.expiresAt = now.plusHours(PICKUP_HOLD_DURATION_HOURS);
+        this.expiresAt = now.plusHours(pickupHoldHours);
     }
 
     /**
