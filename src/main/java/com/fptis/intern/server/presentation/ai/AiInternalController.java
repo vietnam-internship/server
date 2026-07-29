@@ -2,6 +2,7 @@ package com.fptis.intern.server.presentation.ai;
 
 import com.fptis.intern.server.application.ai.AiIntegrationService;
 import com.fptis.intern.server.application.recommendation.BranchRecommendationService;
+import com.fptis.intern.server.global.annotation.PublicApi;
 import com.fptis.intern.server.global.annotation.RequireAuth;
 import com.fptis.intern.server.global.exception.ApiResponse;
 import com.fptis.intern.server.presentation.ai.dto.AiCreateResponse;
@@ -80,7 +81,7 @@ public class AiInternalController {
                     sessionId로 해당 세션을 찾아 ranked items를 저장하고 상태를 COMPLETED로 전환합니다.
                     """
     )
-    @RequireAuth(roles = "AI_AGENT")
+    @PublicApi
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/recommendations/branches")
     public ApiResponse<?> pushBranchRecommendation(@Valid @RequestBody BranchRecommendationPushRequest request) {

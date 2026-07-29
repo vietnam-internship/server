@@ -16,11 +16,13 @@ import com.fptis.intern.server.presentation.ai.dto.AiSignalCreateRequest;
 import com.fptis.intern.server.presentation.ai.dto.BacktestCreateRequest;
 import com.fptis.intern.server.presentation.ai.dto.MacroIndicatorCreateRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -40,6 +42,8 @@ public class AiIntegrationService {
     @Transactional
     public AiCreateResponse createAiSignal(String currencyCode, AiSignalCreateRequest request) {
         Long currencyId = resolveCurrencyId(currencyCode);
+        log.info("[AI 신호 저장] currencyCode={}, signalType={}, windowDays={}, value={}",
+                currencyCode, request.signalType(), request.windowDays(), request.value());
 
         RecommendationSignal signal = RecommendationSignal.builder()
                 .currencyId(currencyId)
@@ -48,11 +52,16 @@ public class AiIntegrationService {
                 .value(request.value())
                 .build();
 
-        return AiCreateResponse.from(recommendationSignalRepository.save(signal).getId());
+        Long savedId = recommendationSignalRepository.save(signal).getId();
+        log.info("[AI 신호 저장 완료] signalId={}", savedId);
+        return AiCreateResponse.from(savedId);
     }
 
     @Transactional
     public AiCreateResponse createMacroIndicator(MacroIndicatorCreateRequest request) {
+        log.info("[매크로 지표 저장] countryCode={}, indicatorType={}, value={}, recordedAt={}",
+                request.countryCode(), request.indicatorType(), request.value(), request.recordedAt());
+
         MacroIndicator indicator = MacroIndicator.builder()
                 .countryCode(request.countryCode())
                 .indicatorType(request.indicatorType())
@@ -60,12 +69,16 @@ public class AiIntegrationService {
                 .recordedAt(request.recordedAt())
                 .build();
 
-        return AiCreateResponse.from(macroIndicatorRepository.save(indicator).getId());
+        Long savedId = macroIndicatorRepository.save(indicator).getId();
+        log.info("[매크로 지표 저장 완료] indicatorId={}", savedId);
+        return AiCreateResponse.from(savedId);
     }
 
     @Transactional
     public AiCreateResponse createBacktestResult(String currencyCode, BacktestCreateRequest request) {
         Long currencyId = resolveCurrencyId(currencyCode);
+        log.info("[백테스트 결과 저장] currencyCode={}, strategyType={}, period={}/{}",
+                currencyCode, request.strategyType(), request.periodStart(), request.periodEnd());
 
         BacktestResult result = BacktestResult.builder()
                 .currencyId(currencyId)
@@ -77,12 +90,16 @@ public class AiIntegrationService {
                 .accuracyRate(request.accuracyRate())
                 .build();
 
-        return AiCreateResponse.from(backtestResultRepository.save(result).getId());
+        Long savedId = backtestResultRepository.save(result).getId();
+        log.info("[백테스트 결과 저장 완료] backtestId={}, accuracyRate={}", savedId, request.accuracyRate());
+        return AiCreateResponse.from(savedId);
     }
 
     @Transactional
     public AiCreateResponse createAiRecommendation(String currencyCode, AiRecommendationCreateRequest request) {
         Long currencyId = resolveCurrencyId(currencyCode);
+        log.info("[AI 추천 저장] currencyCode={}, recommendation={}, confidenceScore={}, signalIds={}",
+                currencyCode, request.recommendation(), request.confidenceScore(), request.signalIds());
 
         // 1. 추천 결과 본체 저장
         AiRecommendation recommendation = AiRecommendation.builder()
@@ -105,6 +122,7 @@ public class AiIntegrationService {
                 .toList();
         
         aiRecommendationSignalRepository.saveAll(mappings);
+        log.info("[AI 추천 저장 완료] recommendationId={}, 매핑된 신호 수={}", savedRecommendation.getId(), mappings.size());
 
         return AiCreateResponse.from(savedRecommendation.getId());
     }
