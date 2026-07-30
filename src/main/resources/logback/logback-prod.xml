@@ -41,6 +41,9 @@
   <!-- 예외 핸들러: static resource 404 등 DEBUG 로그로 원인 확인 가능하게 -->
   <logger name="com.fptis.intern.server.global.exception.GlobalExceptionHandler" level="DEBUG"/>
 
+  <!-- 매 요청마다 찍히는 "authenticated userId=..." DEBUG 로그가 소음이라 억제 -->
+  <logger name="com.fptis.intern.server.global.filter.UserIdFilter" level="INFO"/>
+
   <!-- 프레임워크 소음 억제: ERROR는 커넥션 풀 경고 등 운영 신호까지 가리므로 WARN -->
   <logger name="org.springframework.web" level="WARN"/>
   <logger name="com.zaxxer.hikari" level="WARN"/>
