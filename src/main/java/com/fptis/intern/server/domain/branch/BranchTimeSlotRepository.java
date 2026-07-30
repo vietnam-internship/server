@@ -3,6 +3,7 @@ package com.fptis.intern.server.domain.branch;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -11,6 +12,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface BranchTimeSlotRepository extends JpaRepository<BranchTimeSlot, Long> {
+
+    /** 슬롯 가용 조회용 — 아직 row가 생성 안 된 시각은 여기 안 잡히니, 호출부가 지점 정원으로 보충한다. */
+    List<BranchTimeSlot> findAllByBranchIdAndSlotDate(Long branchId, LocalDate slotDate);
 
     /**
      * 슬롯 행이 없으면 remaining=capacity로 생성하고, 이미 있으면 아무것도 바꾸지 않는다(no-op update).

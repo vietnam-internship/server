@@ -4,6 +4,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -22,6 +23,32 @@ final class BusinessHoursParser {
                     Pattern.CASE_INSENSITIVE);
 
     private BusinessHoursParser() {
+    }
+
+    /**
+     * 특정 요일의 open~close 범위를 반환한다. 매칭되는 세그먼트가 없거나 시간 파싱에 실패하면
+     * empty(그 날은 휴무로 본다). 시간대 조회(가용 슬롯 계산)에 쓰인다 — isOpenAt과 같은 세그먼트
+     * 포맷을 공유하되, 특정 순간이 아니라 그 날 전체 open/close 쌍이 필요할 때 쓴다.
+     */
+    static Optional<LocalTime[]> rangeFor(String businessHours, DayOfWeek day) {
+        if (businessHours == null || businessHours.isBlank()) {
+            return Optional.empty();
+        }
+
+        for (String segment : businessHours.split(",")) {
+            Matcher matcher = SEGMENT.matcher(segment.trim());
+            if (!matcher.matches() || !matchesDay(matcher.group(1), day)) {
+                continue;
+            }
+            try {
+                LocalTime open = LocalTime.parse(matcher.group(2));
+                LocalTime close = LocalTime.parse(matcher.group(3));
+                return Optional.of(new LocalTime[]{open, close});
+            } catch (DateTimeParseException e) {
+                return Optional.empty();
+            }
+        }
+        return Optional.empty();
     }
 
     static boolean isOpenAt(String businessHours, LocalDateTime at) {
