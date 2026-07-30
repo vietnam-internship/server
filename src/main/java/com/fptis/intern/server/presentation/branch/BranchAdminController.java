@@ -50,10 +50,13 @@ public class BranchAdminController {
         return ApiResponse.success(branchService.createBranch(request));
     }
 
-    @Operation(summary = "지점 정보 수정", description = "지점 정보를 부분 수정합니다. null이 아닌 필드만 반영됩니다. ADMIN 권한이 필요합니다.")
-    @RequireAuth(roles = "ADMIN")
+    // 지점 직원(BRANCH_ADMIN)이 /admin/settings에서 자기 지점 정보를 직접 고칠 수 있도록
+    // rate/inventory 엔드포인트와 같은 패턴(assertBranchAccess)으로 권한 확장.
+    @Operation(summary = "지점 정보 수정", description = "지점 정보를 부분 수정합니다. null이 아닌 필드만 반영됩니다. BRANCH_ADMIN은 자기 지점만, ADMIN은 모든 지점을 수정할 수 있습니다.")
+    @RequireAuth(roles = {"BRANCH_ADMIN", "ADMIN"})
     @PatchMapping("/{id}")
-    public ApiResponse<?> updateBranch(@Parameter(description = "지점 ID") @PathVariable Long id, @RequestBody BranchUpdateRequest request) {
+    public ApiResponse<?> updateBranch(@UserId Long userId, @Parameter(description = "지점 ID") @PathVariable Long id, @RequestBody BranchUpdateRequest request) {
+        assertBranchAccess(userId, id);
         return ApiResponse.success(branchService.updateBranch(id, request));
     }
 
