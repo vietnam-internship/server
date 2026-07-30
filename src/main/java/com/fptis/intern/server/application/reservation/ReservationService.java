@@ -29,12 +29,17 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -52,6 +57,16 @@ public class ReservationService {
     private final ReservationHoldService reservationHoldService;
     private final PaymentService paymentService;
     private final CurrencyRepository currencyRepository;
+
+    /**
+     * discussion#41 방안 2 — cancelReservation/rejectByBranch/redeem은 실제 상태 변경을
+     * self를 통해 호출해서, 낙관적 락 충돌({@link ObjectOptimisticLockingFailureException})이
+     * 나면 그 내부 트랜잭션(REQUIRES_NEW)만 롤백되고, 바깥(이 메서드들)에서 새 트랜잭션으로
+     * 재조회해 충돌을 판정할 수 있게 한다. 같은 빈의 self-invocation은 프록시를 안 거쳐
+     * @Transactional이 무시되므로, 지연 주입한 자기 자신을 통해 호출해야 한다.
+     */
+    @Lazy
+    private final ReservationService self;
 
     /**
      * 이 메서드 자체는 직접 쓰기를 하지 않지만, 클래스 기본값(readOnly=true)을 그대로 두면
@@ -115,24 +130,56 @@ public class ReservationService {
         return toDetail(reservation, branch, rate);
     }
 
-    @Transactional
     public void cancelReservation(Long userId, Long id) {
+        try {
+            self.doCancelReservation(userId, id);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.info("[ReservationService] cancelReservation 낙관적 락 충돌 — reservationId={}, userId={}", id, userId);
+            Reservation reservation = getReservationOrThrow(id);
+            assertOwner(reservation, userId);
+            if (reservation.getStatus() != ReservationStatus.CANCELLED) {
+                throw new BusinessException(BusinessErrorCode.RESERVATION_UPDATE_CONFLICT);
+            }
+            // 이미 다른 요청(취소/만료 스윕)이 먼저 취소를 완료함 — 사용자 의도(취소)는 이미
+            // 달성된 상태이므로 에러가 아니라 성공으로 처리한다 (discussion#41).
+        }
+
+        // 취소 알림 발송은 Notification 도메인이 없어 생략한다.
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void doCancelReservation(Long userId, Long id) {
         Reservation reservation = getReservationOrThrow(id);
         assertOwner(reservation, userId);
 
         reservation.cancel(false);
         restoreStock(reservation);
         restoreTimeSlot(reservation);
-
-        // 취소 알림 발송은 Notification 도메인이 없어 생략한다.
     }
 
     /**
      * QR Scan 화면의 Reject 버튼 — 지점 창구가 예약을 거절한다. 소유자(owner) 검증 대신
      * 지점(branchId) 일치 검증으로 인가한다는 점만 cancelReservation과 다르다.
      */
-    @Transactional
     public void rejectByBranch(Long branchId, Long reservationId) {
+        try {
+            self.doRejectByBranch(branchId, reservationId);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.info("[ReservationService] rejectByBranch 낙관적 락 충돌 — reservationId={}, branchId={}",
+                    reservationId, branchId);
+            Reservation reservation = getReservationOrThrow(reservationId);
+            if (!reservation.getBranchId().equals(branchId)) {
+                throw new BusinessException(BusinessErrorCode.RESERVATION_NOT_FOUND);
+            }
+            if (reservation.getStatus() != ReservationStatus.CANCELLED) {
+                throw new BusinessException(BusinessErrorCode.RESERVATION_UPDATE_CONFLICT);
+            }
+            // 이미 다른 요청이 먼저 거절/취소를 완료함 — 의도(거절)는 이미 달성됨, 성공 처리.
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void doRejectByBranch(Long branchId, Long reservationId) {
         Reservation reservation = getReservationOrThrow(reservationId);
         if (!reservation.getBranchId().equals(branchId)) {
             throw new BusinessException(BusinessErrorCode.RESERVATION_NOT_FOUND);
@@ -142,8 +189,34 @@ public class ReservationService {
         restoreTimeSlot(reservation);
     }
 
-    @Transactional
     public RedeemResponse redeem(Long branchId, Long reservationId, RedeemRequest request) {
+        try {
+            return self.doRedeem(branchId, reservationId, request);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.info("[ReservationService] redeem 낙관적 락 충돌 — reservationId={}, branchId={}",
+                    reservationId, branchId);
+            Reservation reservation = reservationRepository.findById(reservationId)
+                    .orElseThrow(() -> new BusinessException(BusinessErrorCode.RESERVATION_NOT_FOUND));
+            if (!reservation.getBranchId().equals(branchId)) {
+                throw new BusinessException(BusinessErrorCode.RESERVATION_NOT_FOUND);
+            }
+            if (reservation.getStatus() != ReservationStatus.COMPLETED) {
+                // 다른 요청이 그 사이 취소/만료시켜서 완료가 아닌 다른 상태로 넘어간 경우 —
+                // 이건 "동시에 같은 픽업을 처리"한 게 아니라 다른 종류의 충돌이라 재시도 안내.
+                throw new BusinessException(BusinessErrorCode.RESERVATION_UPDATE_CONFLICT);
+            }
+            // 이미 다른 요청(동시 스캔 등)이 먼저 완료 처리함 — 픽업 확인 의도는 이미 달성된
+            // 상태이므로 에러가 아니라 그 결과를 그대로 응답한다 (discussion#41과 같은 원칙).
+            Branch branch = getBranchOrThrow(reservation.getBranchId());
+            BranchCurrencyRate rate = branchCurrencyRateRepository
+                    .findRate(branch.getId(), reservation.getCurrencyCode())
+                    .orElse(null);
+            return RedeemResponse.of(reservation, toDetail(reservation, branch, rate));
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RedeemResponse doRedeem(Long branchId, Long reservationId, RedeemRequest request) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.RESERVATION_NOT_FOUND));
         if (!reservation.getBranchId().equals(branchId)) {
@@ -179,31 +252,50 @@ public class ReservationService {
         return RedeemResponse.of(reservation, toDetail(reservation, branch, rate));
     }
 
-    @Transactional
-    public void expireOverdueReservations() {
+    /**
+     * discussion#41 방안 2 — 스윕은 여러 예약을 한 배치로 처리하는데, 한 건이 낙관적 락
+     * 충돌(다른 요청과 동시 처리)이 나도 나머지 예약 정리까지 같이 롤백되면 안 된다. 그래서
+     * 예약 ID 목록만 여기서 돌려주고, 실제 건별 처리(REQUIRES_NEW)와 충돌 캐치는
+     * {@link ReservationExpirySweeper}가 건 단위로 호출하며 담당한다.
+     */
+    public List<Long> findOverdueReservationIds() {
         LocalDateTime now = LocalDateTime.now();
-        List<Reservation> overdue = reservationRepository.findExpiredReservations(ReservationStatus.RESERVED, now);
-        for (Reservation reservation : overdue) {
-            reservation.cancel(true);
-            restoreStock(reservation);
-            restoreTimeSlot(reservation);
+        return reservationRepository.findExpiredReservations(ReservationStatus.RESERVED, now)
+                .stream().map(Reservation::getId).toList();
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void expireOneOverdueReservation(Long reservationId) {
+        Reservation reservation = reservationRepository.findById(reservationId).orElse(null);
+        if (reservation == null || reservation.getStatus() != ReservationStatus.RESERVED) {
+            return; // 이미 다른 경로(취소 등)에서 처리됨 — 멱등 no-op
         }
+        reservation.cancel(true);
+        restoreStock(reservation);
+        restoreTimeSlot(reservation);
     }
 
     /**
      * discussion#16: 결제 TTL(5분)을 넘긴 유령 홀드(PENDING_PAYMENT)를 EXPIRED로 풀고 재고/슬롯을
      * 복원한다. 노쇼 이력(autoExpired)과는 분리한다 — 결제까지 가지 않은 홀드는 노쇼가 아니다.
+     * discussion#41 방안 2 — 위 expireOneOverdueReservation과 같은 이유로 건별 조회/처리만
+     * 담당하고, 배치 순회와 충돌 캐치는 {@link ReservationExpirySweeper}가 한다.
      */
-    @Transactional
-    public void expireOverduePendingPayments() {
+    public List<Long> findOverduePendingPaymentIds() {
         LocalDateTime now = LocalDateTime.now();
-        List<Reservation> overdue = reservationRepository
-                .findExpiredPendingPayments(ReservationStatus.PENDING_PAYMENT, now);
-        for (Reservation reservation : overdue) {
-            reservation.expireHold();
-            restoreStock(reservation);
-            restoreTimeSlot(reservation);
+        return reservationRepository.findExpiredPendingPayments(ReservationStatus.PENDING_PAYMENT, now)
+                .stream().map(Reservation::getId).toList();
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void expireOnePendingPayment(Long reservationId) {
+        Reservation reservation = reservationRepository.findById(reservationId).orElse(null);
+        if (reservation == null || reservation.getStatus() != ReservationStatus.PENDING_PAYMENT) {
+            return; // 이미 다른 경로에서 처리됨 — 멱등 no-op
         }
+        reservation.expireHold();
+        restoreStock(reservation);
+        restoreTimeSlot(reservation);
     }
 
     private void restoreStock(Reservation reservation) {

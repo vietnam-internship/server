@@ -28,6 +28,8 @@ import com.fptis.intern.server.global.exception.BusinessException;
 import com.fptis.intern.server.presentation.reservation.dto.RedeemRequest;
 import com.fptis.intern.server.presentation.reservation.dto.ReservationCreateRequest;
 import com.fptis.intern.server.presentation.reservation.dto.ReservationDetailResponse;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -38,6 +40,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -73,6 +76,8 @@ class ReservationServiceTest {
     private CurrencyRepository currencyRepository;
     @Autowired
     private PaymentRepository paymentRepository;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private ReservationService reservationService;
     private PaymentService paymentService;
@@ -96,7 +101,11 @@ class ReservationServiceTest {
                 timingProperties);
         reservationService = new ReservationService(reservationRepository, userRepository, branchRepository,
                 branchCurrencyRateRepository, branchTimeSlotRepository, reservationHoldService, paymentService,
-                currencyRepository);
+                currencyRepository, null);
+        // self는 프록시(REQUIRES_NEW 등 트랜잭션 어드바이스)를 타야 하는 필드라 Spring 컨테이너
+        // 밖에서 직접 생성할 때는 자기 자신을 그대로 넣는다 — 이 테스트 슬라이스에선 실제
+        // REQUIRES_NEW 전파는 검증하지 않고, 낙관적 락 충돌 캐치/멱등 처리 로직만 검증한다.
+        ReflectionTestUtils.setField(reservationService, "self", reservationService);
 
         verifiedUser = userRepository.save(User.builder()
                 .name("tester")
@@ -304,7 +313,7 @@ class ReservationServiceTest {
         Reservation reservation = reservationRepository.findById(created.id()).orElseThrow();
         ReflectionTestUtils.setField(reservation, "paymentExpiresAt", LocalDateTime.now().minusMinutes(1));
         reservationRepository.save(reservation);
-        reservationService.expireOverduePendingPayments();
+        reservationService.expireOnePendingPayment(created.id());
 
         Payment payment = paymentRepository.findByReservationId(created.id()).orElseThrow();
         paymentService.handlePaymentSucceeded(payment.getPgPaymentIntentId());
@@ -370,7 +379,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(reservation, "expiresAt", LocalDateTime.now().minusMinutes(1));
         reservationRepository.save(reservation);
 
-        reservationService.expireOverdueReservations();
+        reservationService.expireOneOverdueReservation(created.id());
 
         Reservation expired = reservationRepository.findById(created.id()).orElseThrow();
         assertThat(expired.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
@@ -390,7 +399,7 @@ class ReservationServiceTest {
         ReflectionTestUtils.setField(reservation, "paymentExpiresAt", LocalDateTime.now().minusMinutes(1));
         reservationRepository.save(reservation);
 
-        reservationService.expireOverduePendingPayments();
+        reservationService.expireOnePendingPayment(created.id());
 
         Reservation expired = reservationRepository.findById(created.id()).orElseThrow();
         assertThat(expired.getStatus()).isEqualTo(ReservationStatus.EXPIRED);
@@ -399,5 +408,41 @@ class ReservationServiceTest {
         BranchCurrencyRate rate = branchCurrencyRateRepository
                 .findRate(branch.getId(), "USD").orElseThrow();
         assertThat(rate.getReservationOnlyStock()).isEqualTo(1000);
+    }
+
+    /**
+     * discussion#41 방안 2 검증 — 다른 트랜잭션이 이미 커밋해서 버전이 하나 올라간 뒤에도,
+     * 그 커밋 전 버전을 든 채로 저장하려 하면 {@link ObjectOptimisticLockingFailureException}로
+     * 막혀야 한다. @Version 없이는 이 저장이 조용히 성공해서 재고가 중복 복원된다(실제
+     * 부하테스트로 재현: 동시 취소 10건 중 5건 성공, 재고 400 초과 복원).
+     */
+    @Test
+    void staleVersionOnConcurrentCancelIsRejectedInsteadOfDoubleRestoringStock() {
+        ReservationDetailResponse created = reservationService.createReservation(
+                verifiedUser.getId(), createRequest(LocalDate.now().plusDays(1), "10:30"));
+        Long id = created.id();
+
+        // A(실제 서비스 경로)가 먼저 취소를 완료한다 — 버전이 하나 올라가고 재고가 복원된다.
+        reservationService.cancelReservation(verifiedUser.getId(), id);
+        BranchCurrencyRate rateAfterA = branchCurrencyRateRepository.findRate(branch.getId(), "USD").orElseThrow();
+        assertThat(rateAfterA.getReservationOnlyStock()).isEqualTo(1000);
+
+        // B가 A보다 먼저(A 커밋 전) 이 예약을 읽어뒀던 상황을 흉내낸다 — 지금 실제 행 버전에서
+        // 하나 뺀 "오래된" 버전을 들고, 상태도 A가 취소하기 전(RESERVED)으로 되돌린 detached
+        // 사본을 만든다.
+        Reservation staleCopy = reservationRepository.findById(id).orElseThrow();
+        entityManager.detach(staleCopy);
+        Long currentVersion = (Long) ReflectionTestUtils.getField(staleCopy, "version");
+        ReflectionTestUtils.setField(staleCopy, "version", currentVersion - 1);
+        ReflectionTestUtils.setField(staleCopy, "status", ReservationStatus.RESERVED);
+
+        // B가 뒤늦게 자기 몫의 취소를 저장하려 하면, 실제 DB 버전과 안 맞아 충돌해야 한다 —
+        // 그 결과로 재고가 또 복원되는 일이 없어야 한다(안 그러면 두 번 복원돼 1500이 됐을 것).
+        staleCopy.cancel(false);
+        assertThatThrownBy(() -> reservationRepository.saveAndFlush(staleCopy))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+
+        BranchCurrencyRate finalRate = branchCurrencyRateRepository.findRate(branch.getId(), "USD").orElseThrow();
+        assertThat(finalRate.getReservationOnlyStock()).isEqualTo(1000);
     }
 }
