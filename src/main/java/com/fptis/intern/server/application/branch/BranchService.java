@@ -5,6 +5,8 @@ import com.fptis.intern.server.domain.branch.BranchCurrencyRate;
 import com.fptis.intern.server.domain.branch.BranchCurrencyRateRepository;
 import com.fptis.intern.server.domain.branch.BranchRepository;
 import com.fptis.intern.server.domain.branch.BranchSortType;
+import com.fptis.intern.server.domain.branch.BranchTimeSlot;
+import com.fptis.intern.server.domain.branch.BranchTimeSlotRepository;
 import com.fptis.intern.server.domain.currency.Currency;
 import com.fptis.intern.server.domain.currency.CurrencyRepository;
 import com.fptis.intern.server.global.exception.BusinessErrorCode;
@@ -15,12 +17,16 @@ import com.fptis.intern.server.presentation.branch.dto.BranchCurrencyRateRespons
 import com.fptis.intern.server.presentation.branch.dto.BranchDetailResponse;
 import com.fptis.intern.server.presentation.branch.dto.BranchRateUpdateRequest;
 import com.fptis.intern.server.presentation.branch.dto.BranchSummaryResponse;
+import com.fptis.intern.server.presentation.branch.dto.BranchTimeSlotResponse;
 import com.fptis.intern.server.presentation.branch.dto.BranchUpdateRequest;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +47,7 @@ public class BranchService {
     private final BranchRepository branchRepository;
     private final BranchCurrencyRateRepository branchCurrencyRateRepository;
     private final CurrencyRepository currencyRepository;
+    private final BranchTimeSlotRepository branchTimeSlotRepository;
 
     public List<BranchSummaryResponse> listBranches(String currencyCode, Double latitude, Double longitude,
                                                       BranchSortType sort) {
@@ -106,6 +113,33 @@ public class BranchService {
                 .build();
         branchRepository.save(branch);
         return BranchDetailResponse.of(branch, List.of(), Map.of(), false);
+    }
+
+    /**
+     * 지점의 특정 날짜 예약 가능 슬롯 목록. branch_time_slots 행은 첫 예약 시도 때 지연 생성되므로
+     * (BranchTimeSlotRepository.ensureExists 참고), 아직 행이 없는 시각은 지점 정원(timeSlotCapacity)
+     * 그대로를 remaining으로 채워 넣는다 — row 유무와 무관하게 항상 영업시간 전체가 나와야 한다.
+     */
+    public BranchTimeSlotResponse getTimeSlots(Long id, LocalDate date) {
+        Branch branch = getBranchOrThrow(id);
+        Optional<LocalTime[]> range = branch.businessHoursOn(date);
+        if (range.isEmpty()) {
+            return new BranchTimeSlotResponse(false, List.of());
+        }
+
+        LocalTime open = range.get()[0];
+        LocalTime close = range.get()[1];
+
+        Map<LocalTime, Integer> remainingByTime = branchTimeSlotRepository.findAllByBranchIdAndSlotDate(id, date)
+                .stream()
+                .collect(Collectors.toMap(BranchTimeSlot::getSlotTime, BranchTimeSlot::getRemaining));
+
+        List<BranchTimeSlotResponse.Slot> slots = new ArrayList<>();
+        for (LocalTime time = open; time.isBefore(close); time = time.plusMinutes(30)) {
+            int remaining = remainingByTime.getOrDefault(time, branch.getTimeSlotCapacity());
+            slots.add(new BranchTimeSlotResponse.Slot(time, remaining));
+        }
+        return new BranchTimeSlotResponse(true, slots);
     }
 
     @Transactional

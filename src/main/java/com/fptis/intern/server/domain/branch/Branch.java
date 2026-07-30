@@ -12,9 +12,12 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -117,5 +120,10 @@ public class Branch extends BaseTimeEntity {
 
     public boolean isOpenNow(LocalDateTime at) {
         return BusinessHoursParser.isOpenAt(businessHours, at);
+    }
+
+    /** 특정 날짜의 open/close 범위. 그 요일에 해당하는 세그먼트가 없으면(휴무) empty. */
+    public Optional<LocalTime[]> businessHoursOn(LocalDate date) {
+        return BusinessHoursParser.rangeFor(businessHours, date.getDayOfWeek());
     }
 }

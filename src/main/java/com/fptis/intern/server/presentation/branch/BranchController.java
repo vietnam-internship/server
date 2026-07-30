@@ -8,7 +8,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,6 +43,17 @@ public class BranchController {
     @GetMapping("/{id}")
     public ApiResponse<?> getBranch(@Parameter(description = "지점 ID") @PathVariable Long id) {
         return ApiResponse.success(branchService.getBranch(id));
+    }
+
+    @Operation(summary = "지점 예약 가능 슬롯 조회",
+            description = "지점의 특정 날짜 30분 단위 슬롯과 잔여 정원을 조회합니다. 인증이 필요 없는 공개 API입니다.")
+    @PublicApi
+    @SecurityRequirements
+    @GetMapping("/{id}/time-slots")
+    public ApiResponse<?> getTimeSlots(@Parameter(description = "지점 ID") @PathVariable Long id,
+                                        @Parameter(description = "조회할 날짜 (예: 2026-08-01)")
+                                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ApiResponse.success(branchService.getTimeSlots(id, date));
     }
 
 }
