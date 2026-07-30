@@ -8,7 +8,7 @@
   <!-- 컨테이너 로그 수집(stdout) 대상 - %clr은 TTY가 아니면 자동으로 색상 미적용 -->
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
-      <pattern>%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint}|%clr(%-5level)|%clr(%-40.40logger{39}){cyan}|%m%n%ex{10}</pattern>
+      <pattern>%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint}|%clr(%-5level)|%clr(%-40.40logger{39}){cyan}|%m%n%ex</pattern>
       <charset>UTF-8</charset>
     </encoder>
   </appender>
@@ -16,7 +16,7 @@
   <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
     <file>${LOG_PATH}</file>
     <encoder>
-      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS}|%-5level|%-40.40logger{39}|%m%n%ex</pattern>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS}|%-5level|%-40.40logger{39}|%m%n%wEx</pattern>
       <charset>UTF-8</charset>
     </encoder>
     <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
@@ -37,6 +37,9 @@
 
   <!-- 애플리케이션 -->
   <logger name="com.fptis.intern.server" level="INFO"/>
+
+  <!-- 예외 핸들러: static resource 404 등 DEBUG 로그로 원인 확인 가능하게 -->
+  <logger name="com.fptis.intern.server.global.exception.GlobalExceptionHandler" level="DEBUG"/>
 
   <!-- 프레임워크 소음 억제: ERROR는 커넥션 풀 경고 등 운영 신호까지 가리므로 WARN -->
   <logger name="org.springframework.web" level="WARN"/>

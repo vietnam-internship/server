@@ -69,6 +69,11 @@ public enum BusinessErrorCode implements ErrorCode {
     INVALID_GOOGLE_TOKEN(HttpStatus.UNAUTHORIZED, "A003", "유효하지 않은 구글 인증 정보입니다."),
 
     /*
+     * 404 NOT_FOUND: 존재하지 않는 엔드포인트/리소스 (도메인 무관 공통)
+     */
+    RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "C011", "요청하신 리소스를 찾을 수 없습니다."),
+
+    /*
      * 405 METHOD_NOT_ALLOWED: 허용되지 않은 Request Method 호출
      */
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "C007", "허용되지 않은 메서드입니다."),
