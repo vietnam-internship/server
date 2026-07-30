@@ -1,3 +1,8 @@
+-- mysql 클라이언트 세션 기본 charset이 latin1이라, 이게 없으면 business_hours의 한글
+-- (평일/주말)이 저장 시점에 깨진다(SELECT 시점 문제가 아니라 저장 시점이라 나중에
+-- utf8mb4로 다시 읽어도 복구 안 됨).
+SET NAMES utf8mb4;
+
 -- Test branches. Manual fixture — see README.md. business_hours format is parsed by
 -- BusinessHoursParser: "<요일/평일/주말> HH:mm-HH:mm" segments separated by commas.
 --
