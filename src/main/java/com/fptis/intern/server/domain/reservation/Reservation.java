@@ -11,6 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -90,6 +91,17 @@ public class Reservation extends BaseTimeEntity {
      */
     @Column(name = "auto_expired", nullable = false)
     private boolean autoExpired;
+
+    /**
+     * discussion#41 방안 2 — 취소(cancel)/redeem/만료 스윕이 이 행을 findById로만 읽고 락 없이
+     * 상태를 바꾸다 보니, 서로 커밋하기 전에 동시에 읽으면 재고/슬롯이 중복 복원될 수 있었다
+     * (재현: 동시 취소 10건 중 5건 성공, 재고 400 초과 복원). 이 컬럼으로 낙관적 락을 걸어,
+     * 늦게 커밋하는 쪽만 {@link org.springframework.orm.ObjectOptimisticLockingFailureException}로
+     * 막히게 한다 — 처리는 ReservationService의 각 호출부에서 한다.
+     */
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     @Builder
     private Reservation(Long userId, Long branchId, String currencyCode, double amount,

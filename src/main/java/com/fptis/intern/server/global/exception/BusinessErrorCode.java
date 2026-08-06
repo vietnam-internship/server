@@ -98,6 +98,7 @@ public enum BusinessErrorCode implements ErrorCode {
     RESERVATION_ALREADY_EXPIRED(HttpStatus.CONFLICT, "C212", "결제 대기 시간이 만료된 예약입니다."),
     AMOUNT_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "C214", "USD 10,000 상당액 이상은 예약할 수 없습니다."),
     AMOUNT_BELOW_MINIMUM(HttpStatus.BAD_REQUEST, "C215", "최소 환전 금액(10,000 VND 상당액) 미만입니다."),
+    RESERVATION_UPDATE_CONFLICT(HttpStatus.CONFLICT, "C216", "다른 요청이 먼저 처리 중입니다. 잠시 후 다시 시도해주세요."),
 
     /*
      * 유지훈 : C3xx (Payment)
