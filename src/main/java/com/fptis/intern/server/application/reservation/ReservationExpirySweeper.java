@@ -1,8 +1,5 @@
 package com.fptis.intern.server.application.reservation;
 
-import com.fptis.intern.server.global.config.ReservationTimingProperties;
-import com.fptis.intern.server.global.notify.DiscordNotifier;
-import java.util.concurrent.atomic.AtomicInteger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -17,11 +14,6 @@ import org.springframework.stereotype.Component;
  * discussion#41 방안 2 — 예약 건별로 별도 트랜잭션(REQUIRES_NEW)에서 처리하고, 사용자의 취소
  * 요청 등과 낙관적 락이 충돌한 건은 개별로 건너뛴다. 한 건의 충돌이 같은 배치의 나머지 예약
  * 정리를 막으면 안 되기 때문이다.
- *
- * discussion-reservation-optimistic-lock-observability.md 방안 2 — TimeSlotInventoryReconciler를
- * 별도 @Scheduled로 돌리면 이 프로젝트가 스케줄링 전용 스레드 풀을 안 나눠(기본 스레드 1개 공유)
- * 이 스윕 틱과 스레드를 다투게 된다. 저빈도 안전망이라 그럴 만큼 급하지 않아, 이 sweep() 안에서
- * 틱을 세다가 N틱마다 한 번 호출하도록 합친다.
  */
 @Slf4j
 @Component
@@ -29,11 +21,6 @@ import org.springframework.stereotype.Component;
 public class ReservationExpirySweeper {
 
     private final ReservationService reservationService;
-    private final TimeSlotInventoryReconciler timeSlotInventoryReconciler;
-    private final DiscordNotifier discordNotifier;
-    private final ReservationTimingProperties timingProperties;
-
-    private final AtomicInteger tickCount = new AtomicInteger();
 
     @Scheduled(fixedDelayString = "${travelx.reservation.expiry-sweep-interval-ms:60000}")
     public void sweep() {
@@ -53,15 +40,6 @@ public class ReservationExpirySweeper {
                 log.info("[ReservationExpirySweeper] 결제 홀드 만료 처리 중 낙관적 락 충돌 — 다른 요청이 먼저 "
                         + "처리함, reservationId={}", id);
                 reservationService.recordOptimisticLockConflict("sweep_pending");
-            }
-        }
-
-        if (tickCount.incrementAndGet() % timingProperties.inventoryReconcileEveryNTicks() == 0) {
-            try {
-                timeSlotInventoryReconciler.reconcile();
-            } catch (InventoryConsistencyViolationException e) {
-                log.error("[ReservationExpirySweeper] {}", e.getMessage());
-                discordNotifier.send("[TravelX] " + e.getMessage());
             }
         }
     }
