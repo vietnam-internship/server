@@ -55,6 +55,16 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     @Query("select count(r) from Reservation r where r.userId = :userId and r.status = :status")
     long countByUserIdAndStatus(@Param("userId") Long userId, @Param("status") ReservationStatus status);
 
+    /**
+     * countByUserIdAndStatus와 조건은 같지만, 유저 행 락(UserRepository#findForUpdate) 대기 후에도
+     * 최신 커밋 데이터를 보장해야 하는 곳(동시 PENDING_PAYMENT 1건 제한, discussion#16)에서 쓰는
+     * 락 획득 읽기 버전이다. 이유는 {@link #findActiveReservationsForUpdate}와 동일 — MySQL
+     * REPEATABLE READ에서 일반 SELECT는 유저 락 대기 전 스냅샷을 읽는다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("select r from Reservation r where r.userId = :userId and r.status = :status")
+    List<Reservation> findByUserIdAndStatusForUpdate(@Param("userId") Long userId, @Param("status") ReservationStatus status);
+
     @Query("select count(r) from Reservation r where r.status = :status")
     long countByStatus(@Param("status") ReservationStatus status);
 
