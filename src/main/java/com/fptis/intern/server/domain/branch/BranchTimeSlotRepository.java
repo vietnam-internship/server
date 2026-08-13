@@ -33,4 +33,15 @@ public interface BranchTimeSlotRepository extends JpaRepository<BranchTimeSlot, 
     @Query("select s from BranchTimeSlot s where s.branchId = :branchId and s.slotDate = :slotDate and s.slotTime = :slotTime")
     Optional<BranchTimeSlot> lockForUpdate(@Param("branchId") Long branchId, @Param("slotDate") LocalDate slotDate,
                                             @Param("slotTime") LocalTime slotTime);
+
+    /**
+     * discussion-reservation-optimistic-lock-observability.md 방안 2 — remaining은 지점 정원을
+     * 절대 넘을 수 없는 불변식인데, Branch와 BranchTimeSlot은 FK만 있고 JPA 연관관계가 없어
+     * 상관 서브쿼리로 비교한다. "모든 미래 슬롯"만 순회한다(문서 방안 2) — 지난 슬롯은 이미
+     * 픽업 마감이 지나 재발생하지 않는 과거 데이터라, 스캔 대상에 넣으면 한 번 발생한 위반이
+     * 스크립트로 고치기 전까지 매 틱 알림을 계속 울린다. TimeSlotInventoryReconciler 전용 조회.
+     */
+    @Query("select s from BranchTimeSlot s where s.slotDate >= :today "
+            + "and s.remaining > (select b.timeSlotCapacity from Branch b where b.id = s.branchId)")
+    List<BranchTimeSlot> findOverCapacitySlots(@Param("today") LocalDate today);
 }
