@@ -8,6 +8,5 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * 엔티티 메서드에 파라미터로 넘긴다.
  */
 @ConfigurationProperties(prefix = "travelx.reservation")
-public record ReservationTimingProperties(int paymentHoldMinutes, int pickupHoldHours,
-                                           int inventoryReconcileEveryNTicks) {
+public record ReservationTimingProperties(int paymentHoldMinutes, int pickupHoldHours) {
 }

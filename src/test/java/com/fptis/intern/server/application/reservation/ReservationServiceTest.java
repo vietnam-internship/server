@@ -115,7 +115,7 @@ class ReservationServiceTest {
 
     /** FakePaymentGateway 대신 지정한 PaymentGateway로 새 ReservationService 인스턴스를 만든다. */
     private ReservationService buildReservationService(PaymentGateway gateway) {
-        ReservationTimingProperties timingProperties = new ReservationTimingProperties(5, 2, 5);
+        ReservationTimingProperties timingProperties = new ReservationTimingProperties(5, 2);
         ReservationHoldService holdService = new ReservationHoldService(reservationRepository, userRepository,
                 branchRepository, branchCurrencyRateRepository, branchTimeSlotRepository, timingProperties);
         PaymentService gatewayPaymentService = new PaymentService(reservationRepository, paymentRepository, gateway,
@@ -129,7 +129,7 @@ class ReservationServiceTest {
 
     @BeforeEach
     void setUp() {
-        ReservationTimingProperties timingProperties = new ReservationTimingProperties(5, 2, 5);
+        ReservationTimingProperties timingProperties = new ReservationTimingProperties(5, 2);
         ReservationHoldService reservationHoldService = new ReservationHoldService(reservationRepository,
                 userRepository, branchRepository, branchCurrencyRateRepository, branchTimeSlotRepository,
                 timingProperties);
