@@ -36,6 +36,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -92,11 +93,45 @@ class ReservationServiceTest {
         }
     }
 
+    /**
+     * discussion-reservation-payment-failure-compensation.md 검증용 — 지정한 에러코드로 항상
+     * 실패하는 게이트웨이. PAYMENT_INTENT_CREATE_FAILED(확정 실패)/PAYMENT_INTENT_CREATE_OUTCOME_UNKNOWN
+     * (결과 불확실) 각각에서 보상 여부가 갈리는지를 검증한다.
+     */
+    private static class FailingPaymentGateway implements PaymentGateway {
+        private final BusinessErrorCode errorCode;
+
+        private FailingPaymentGateway(BusinessErrorCode errorCode) {
+            this.errorCode = errorCode;
+        }
+
+        @Override
+        public PaymentIntentResult createIntent(String idempotencyKey, long amountMinorUnits, String currency,
+                                                 Map<String, String> metadata) {
+            throw new BusinessException(errorCode);
+        }
+    }
+
+    /** FakePaymentGateway 대신 지정한 PaymentGateway로 새 ReservationService 인스턴스를 만든다. */
+    private ReservationService buildReservationService(PaymentGateway gateway) {
+        ReservationTimingProperties timingProperties = new ReservationTimingProperties(5, 2);
+        ReservationHoldService holdService = new ReservationHoldService(reservationRepository, userRepository,
+                branchRepository, branchCurrencyRateRepository, branchTimeSlotRepository, timingProperties);
+        PaymentService gatewayPaymentService = new PaymentService(reservationRepository, paymentRepository, gateway,
+                timingProperties);
+        ReservationService service = new ReservationService(reservationRepository, userRepository, branchRepository,
+                branchCurrencyRateRepository, branchTimeSlotRepository, holdService, gatewayPaymentService,
+                currencyRepository, null);
+        ReflectionTestUtils.setField(service, "self", service);
+        return service;
+    }
+
     @BeforeEach
     void setUp() {
         ReservationTimingProperties timingProperties = new ReservationTimingProperties(5, 2);
         ReservationHoldService reservationHoldService = new ReservationHoldService(reservationRepository,
-                branchRepository, branchCurrencyRateRepository, branchTimeSlotRepository, timingProperties);
+                userRepository, branchRepository, branchCurrencyRateRepository, branchTimeSlotRepository,
+                timingProperties);
         paymentService = new PaymentService(reservationRepository, paymentRepository, new FakePaymentGateway(),
                 timingProperties);
         reservationService = new ReservationService(reservationRepository, userRepository, branchRepository,
@@ -190,6 +225,57 @@ class ReservationServiceTest {
         Payment payment = paymentRepository.findByReservationId(response.id()).orElseThrow();
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
         assertThat(payment.getPgPaymentIntentId()).isNotBlank();
+    }
+
+    @Test
+    void createReservationCompensatesHoldOnDefinitePaymentFailure() {
+        ReservationService failingService = buildReservationService(
+                new FailingPaymentGateway(BusinessErrorCode.PAYMENT_INTENT_CREATE_FAILED));
+        LocalDate pickupDate = LocalDate.now().plusDays(1);
+
+        assertThatThrownBy(() -> failingService.createReservation(verifiedUser.getId(), createRequest(pickupDate, "13:00")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BusinessErrorCode.PAYMENT_INTENT_CREATE_FAILED);
+
+        Reservation failed = reservationRepository.findMyReservations(verifiedUser.getId(), PageRequest.of(0, 1))
+                .getContent().get(0);
+        assertThat(failed.getStatus()).isEqualTo(ReservationStatus.EXPIRED);
+
+        // 보상으로 재고가 즉시 복원돼, 스윕러의 5분 TTL을 기다리지 않고 바로 재예약할 수 있어야 한다.
+        ReservationDetailResponse retry = reservationService.createReservation(
+                verifiedUser.getId(), createRequest(pickupDate, "13:00"));
+        assertThat(retry.status()).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+
+        BranchCurrencyRate rate = branchCurrencyRateRepository.findRate(branch.getId(), "USD").orElseThrow();
+        assertThat(rate.getReservationOnlyStock()).isEqualTo(500); // 1000 -> (실패분 복원) 1000 -> (재시도분 차감) 500
+    }
+
+    @Test
+    void createReservationDoesNotCompensateOnAmbiguousPaymentFailure() {
+        ReservationService failingService = buildReservationService(
+                new FailingPaymentGateway(BusinessErrorCode.PAYMENT_INTENT_CREATE_OUTCOME_UNKNOWN));
+        LocalDate pickupDate = LocalDate.now().plusDays(1);
+
+        assertThatThrownBy(() -> failingService.createReservation(verifiedUser.getId(), createRequest(pickupDate, "14:00")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BusinessErrorCode.PAYMENT_INTENT_CREATE_OUTCOME_UNKNOWN);
+
+        // 결과 불확실 실패는 보상하지 않는다 — Stripe에 실제로 PaymentIntent가 생겼을 수 있어,
+        // 예약을 PENDING_PAYMENT 그대로 두고 재고도 차감된 채로 남겨 TTL 스윕에 맡긴다.
+        Reservation stillPending = reservationRepository.findMyReservations(verifiedUser.getId(), PageRequest.of(0, 1))
+                .getContent().get(0);
+        assertThat(stillPending.getStatus()).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+
+        BranchCurrencyRate rate = branchCurrencyRateRepository.findRate(branch.getId(), "USD").orElseThrow();
+        assertThat(rate.getReservationOnlyStock()).isEqualTo(500); // 1000 -> (차감된 채 복원 안 됨) 500
+
+        // 보상이 없었으므로 동시 PENDING_PAYMENT 제한에 걸려 즉시 재시도도 못 한다.
+        assertThatThrownBy(() -> reservationService.createReservation(verifiedUser.getId(), createRequest(pickupDate, "14:00")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(BusinessErrorCode.CONCURRENT_PENDING_PAYMENT_LIMIT);
     }
 
     @Test

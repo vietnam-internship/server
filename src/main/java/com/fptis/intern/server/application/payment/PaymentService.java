@@ -15,6 +15,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -38,13 +39,18 @@ public class PaymentService {
     private final ReservationTimingProperties timingProperties;
 
     /**
-     * 예약 홀드가 커밋되어 재고/슬롯 락이 이미 풀린 뒤에만 호출해야 한다 — Stripe PaymentIntent
-     * 생성은 외부 HTTP 호출이라 ReservationHoldService의 락 트랜잭션 안에서 부르면 discussion#16이
-     * 버린 방안 1(락을 PG 응답 속도에 종속시킴)과 똑같아진다.
+     * `docs/discussion-reservation-transaction-boundary.md`의 Phase 2 — `REQUIRES_NEW`로 새
+     * 트랜잭션을 강제로 연다. `ReservationHoldService.createHold`(Phase 1, 재고/슬롯 락)가 이미
+     * 커밋된 뒤 호출되는 게 오늘 시점의 호출 경로(`ReservationService.createReservation`)이긴
+     * 하지만, 그건 그 메서드가 자기 트랜잭션을 안 열기 때문이지 이 메서드 혼자만으로 보장되는
+     * 성질이 아니다 — 나중에 이 메서드가 이미 열린 다른 트랜잭션(락을 쥔 채로) 안에서 호출돼도
+     * 락을 이어받지 않도록 `REQUIRES_NEW`로 명시한다. Stripe PaymentIntent 생성은 외부 HTTP
+     * 호출이라, 재고/슬롯 락과 같은 트랜잭션에 있으면 discussion#16이 버린 방안 1(락을 PG 응답
+     * 속도에 종속시킴)과 똑같아진다.
      * TODO(#26): amount/currencyCode는 아직 외화 표시 금액이다 — 실제 청구해야 할 KRW 금액은
      * 기준 환율(Currency 도메인) 연동 전까지 계산할 수 없어 자리표시자로 그대로 전달한다.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public PaymentIntentResult createPaymentIntent(Reservation reservation) {
         Payment payment = Payment.initiate(reservation.getId(), DEFAULT_PROVIDER, reservation.getReservationNumber(),
                 reservation.getAmount(), reservation.getCurrencyCode(), LocalDateTime.now());

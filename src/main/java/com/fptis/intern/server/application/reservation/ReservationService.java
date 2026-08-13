@@ -32,7 +32,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -47,7 +46,6 @@ public class ReservationService {
 
     private static final double AMOUNT_LIMIT_USD = 10_000;
     private static final double AMOUNT_MIN_VND = 10_000;
-
 
     private final ReservationRepository reservationRepository;
     private final UserRepository userRepository;
@@ -69,22 +67,24 @@ public class ReservationService {
     private final ReservationService self;
 
     /**
-     * 이 메서드 자체는 직접 쓰기를 하지 않지만, 클래스 기본값(readOnly=true)을 그대로 두면
-     * reservationHoldService.createHold()가 같은 물리 트랜잭션에 join되어 그 안의
-     * SELECT ... FOR UPDATE가 "READ ONLY transaction" 에러로 실패한다 — Spring은 REQUIRED
-     * propagation으로 참여하는 하위 트랜잭션의 readOnly 속성을 무시하고 바깥쪽(첫 트랜잭션)
-     * 설정을 그대로 쓰기 때문이다. 그래서 여기서 명시적으로 쓰기 트랜잭션을 연다.
+     * `docs/discussion-reservation-transaction-boundary.md`의 Phase 0/3 — 이 메서드 자체는
+     * 트랜잭션을 열지 않는다(`NOT_SUPPORTED`로 클래스 기본값 readOnly=true를 명시적으로 덮어씀).
+     * 아래에서 부르는 {@code reservationHoldService.createHold}(Phase 1, 재고/슬롯 락)와
+     * {@code paymentService.createPaymentIntent}(Phase 2, Stripe 호출)는 각자 독립된 트랜잭션을
+     * 열어야 하는데, 이 메서드가 감싸는 트랜잭션을 갖고 있으면 둘 다 거기에 합류해버려서 재고/슬롯
+     * 락이 Stripe 응답을 기다리는 동안까지 유지된다 — discussion#16이 버린 방안 1(Combined)과
+     * 똑같아진다. 인증/금액한도 검증과 응답 조립은 순수 조회라 각 repository 호출이
+     * (Spring Data JPA의 {@code SimpleJpaRepository} 기본 동작대로) 자체 트랜잭션으로 처리된다.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ReservationDetailResponse createReservation(Long userId, ReservationCreateRequest request) {
         userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.UNAUTHORIZED));
         LocalDateTime now = LocalDateTime.now();
 
-        assertNoShowLimitNotExceeded(userId, now);
-        assertNoConcurrentPendingPayment(userId);
-
-        // 금액 한도 검증 (#26) — createHold 전에 Currency/Rate를 미리 읽어 한도 확인 후 lockedRate 계산
+        // 금액 한도 검증 (#26) — createHold 전에 Currency/Rate를 미리 읽어 한도 확인 후 lockedRate 계산.
+        // 유저 단위 불변식(노쇼/동시 PENDING_PAYMENT 제한)은 여기서 확인하지 않는다 — Phase 1
+        // (createHold)이 유저 락을 잡은 채로 확인해야 TOCTOU가 안 생긴다(위 문서 방안 1).
         Branch branchForValidation = branchRepository.findById(request.branchId())
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.BRANCH_NOT_FOUND));
         Currency currency = currencyRepository.findByCode(request.currencyCode())
@@ -94,12 +94,32 @@ public class ReservationService {
                 .orElseThrow(() -> new BusinessException(BusinessErrorCode.STOCK_EXCEEDED));
         double lockedRate = assertAmountWithinLimits(currency, rateForValidation, request.amount());
 
-        Reservation reservation = reservationHoldService.createHold(userId, request, now);
-        reservation.assignLockedRate(lockedRate);
+        Reservation reservation = reservationHoldService.createHold(userId, request, now, lockedRate);
 
-        // Stripe PaymentIntent 생성 실패 시 이 예약은 결제 연결 없는 PENDING_PAYMENT로 남지만,
-        // 5분 결제 TTL이 지나면 expireOverduePendingPayments()가 재고/슬롯을 알아서 회수한다.
-        PaymentIntentResult intent = paymentService.createPaymentIntent(reservation);
+        PaymentIntentResult intent;
+        try {
+            intent = paymentService.createPaymentIntent(reservation);
+        } catch (BusinessException e) {
+            if (e.getErrorCode() == BusinessErrorCode.PAYMENT_INTENT_CREATE_FAILED) {
+                // Stripe가 요청을 명확히 거절해 PaymentIntent가 생성되지 않았음이 확인된 경우만
+                // 즉시 보상한다 — expireOnePendingPayment는 ReservationExpirySweeper가 5분 TTL
+                // 만료 건마다 호출하는 것과 같은 메서드라, "그 정리를 기다리지 않고 지금 바로
+                // 한다"는 것과 같다. 상태 가드가 있어 멱등이지만, 그 사이 스윕러가 먼저 같은 행을
+                // 만졌다면 낙관적 락 충돌이 날 수 있어 원래 예외(e)를 가리지 않도록 감싼다.
+                try {
+                    self.expireOnePendingPayment(reservation.getId());
+                } catch (ObjectOptimisticLockingFailureException lockConflict) {
+                    log.info("[ReservationService] Stripe 실패 보상 중 낙관적 락 충돌 — 이미 다른 경로(스윕러 등)로 "
+                            + "정리된 것으로 판단, reservationId={}", reservation.getId());
+                }
+            }
+            // PAYMENT_INTENT_CREATE_OUTCOME_UNKNOWN(타임아웃/Stripe 5xx/idempotency 충돌)은 여기서
+            // 보상하지 않는다 — Stripe가 실제로는 PaymentIntent를 만들었을 수 있어, 지금 취소하면
+            // 그쪽엔 살아있는 intent가 있는데 우리 예약만 취소된 상태로 어긋날 수 있다. 이 경우는
+            // ReservationExpirySweeper가 5분 결제 TTL 만료 시 findOverduePendingPaymentIds() +
+            // expireOnePendingPayment()로 재고/슬롯을 회수한다.
+            throw e;
+        }
 
         // 결제 대기(PENDING_PAYMENT) 홀드 생성 알림 발송은 Notification 도메인이 없어 생략한다.
         // QR은 결제 승인 전에는 발급하지 않는다 — PaymentService.handlePaymentSucceeded(웹훅)에서 발급한다.
@@ -307,51 +327,6 @@ public class ReservationService {
         branchTimeSlotRepository
                 .lockForUpdate(reservation.getBranchId(), reservation.getPickupDate(), reservation.getPickupTime())
                 .ifPresent(BranchTimeSlot::increaseRemaining);
-    }
-
-    /**
-     * PRD §19.2: 최근 30일 노쇼 1회 → 동시 RESERVED 1건 제한, 누적 3회 이상이면 가장 최근
-     * 노쇼로부터 7일간 신규 예약을 차단한다.
-     */
-    private void assertNoShowLimitNotExceeded(Long userId, LocalDateTime now) {
-        long noShowCount = reservationRepository.countNoShowsSince(userId, ReservationStatus.CANCELLED, now.minusDays(30));
-
-        if (noShowCount >= 3) {
-            LocalDateTime sevenDaysAgo = now.minusDays(7);
-            boolean blockedByRecentNoShow = reservationRepository
-                    .findNoShows(userId, ReservationStatus.CANCELLED, PageRequest.of(0, 1))
-                    .stream().findFirst()
-                    .map(r -> r.getUpdatedAt().isAfter(sevenDaysAgo))
-                    .orElse(false);
-            if (blockedByRecentNoShow) {
-                throw new BusinessException(BusinessErrorCode.NO_SHOW_LIMIT);
-            }
-        } else if (noShowCount >= 1) {
-            // 활성 예약 수를 세는 시점과 예약을 생성하는 시점 사이의 레이스를 막기 위해,
-            // 카운트를 읽기 전 유저 행에 락을 걸어 같은 유저의 동시 요청을 직렬화한다.
-            // 이 락은 트랜잭션이 끝날 때까지 유지되므로, 뒤이은 재고/슬롯 락(findForUpdate/lockForUpdate)과의
-            // 데드락을 피하려면 항상 유저 락을 먼저 잡아야 한다.
-            userRepository.findForUpdate(userId)
-                    .orElseThrow(() -> new BusinessException(BusinessErrorCode.UNAUTHORIZED));
-            // MySQL REPEATABLE READ에서 일반 SELECT는 유저 락 대기 전 스냅샷을 읽어 방금 커밋된
-            // 예약을 놓칠 수 있어, 최신 커밋 데이터를 보장하는 락 획득 읽기로 확인한다.
-            boolean hasActiveReservation = !reservationRepository
-                    .findActiveReservationsForUpdate(userId, ReservationStatus.RESERVED, now)
-                    .isEmpty();
-            if (hasActiveReservation) {
-                throw new BusinessException(BusinessErrorCode.NO_SHOW_LIMIT);
-            }
-        }
-    }
-
-    /**
-     * discussion#16 유령 홀드 완화책: 인증된 사용자당 동시 PENDING_PAYMENT 1건 제한.
-     */
-    private void assertNoConcurrentPendingPayment(Long userId) {
-        long pendingCount = reservationRepository.countByUserIdAndStatus(userId, ReservationStatus.PENDING_PAYMENT);
-        if (pendingCount > 0) {
-            throw new BusinessException(BusinessErrorCode.CONCURRENT_PENDING_PAYMENT_LIMIT);
-        }
     }
 
     /**

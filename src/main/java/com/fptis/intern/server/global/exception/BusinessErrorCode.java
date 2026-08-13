@@ -106,6 +106,7 @@ public enum BusinessErrorCode implements ErrorCode {
     PAYMENT_NOT_PENDING(HttpStatus.CONFLICT, "C301", "결제 대기 상태의 예약이 아닙니다."),
     CONCURRENT_PENDING_PAYMENT_LIMIT(HttpStatus.FORBIDDEN, "C304", "이미 결제 대기 중인 예약이 있어 새로운 예약을 홀드할 수 없습니다."),
     PAYMENT_INTENT_CREATE_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "C305", "결제 준비에 실패했습니다. 잠시 후 다시 예약해주세요."),
+    PAYMENT_INTENT_CREATE_OUTCOME_UNKNOWN(HttpStatus.SERVICE_UNAVAILABLE, "C306", "결제 준비 결과를 확인하지 못했습니다. 잠시 후 예약 상태를 다시 확인해주세요."),
 
     /*
      * 409 CONFLICT: 리소스 충돌 (중복 데이터 등)
