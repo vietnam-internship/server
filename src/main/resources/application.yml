@@ -83,6 +83,12 @@ travelx:
     pickup-hold-hours: ${RESERVATION_PICKUP_HOLD_HOURS:2}
     # ReservationExpirySweeper가 위 두 TTL 만료 건을 정리하러 도는 주기(ms).
     expiry-sweep-interval-ms: ${RESERVATION_EXPIRY_SWEEP_INTERVAL_MS:60000}
+    # TimeSlotInventoryReconciler를 몇 스윕 틱마다 호출할지 — 기본 5틱(60s*5≈5분).
+    inventory-reconcile-every-n-ticks: ${RESERVATION_INVENTORY_RECONCILE_EVERY_N_TICKS:5}
+  notify:
+    # 재고 정합성 위반(InventoryConsistencyViolationException) 발생 시 알림 보낼 Discord 웹훅.
+    # 미설정 시 DiscordNotifier가 조용히 스킵한다.
+    discord-webhook-url: ${DISCORD_WEBHOOK_URL:}
   jwt:
     access-token-expire-minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:30}
     refresh-token-expire-days: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:14}
