@@ -23,6 +23,7 @@ import com.fptis.intern.server.presentation.reservation.dto.ReservationCreateReq
 import com.fptis.intern.server.presentation.reservation.dto.ReservationDetailResponse;
 import com.fptis.intern.server.presentation.reservation.dto.ReservationPageResponse;
 import com.fptis.intern.server.presentation.reservation.dto.ReservationSummaryResponse;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
@@ -55,6 +56,7 @@ public class ReservationService {
     private final ReservationHoldService reservationHoldService;
     private final PaymentService paymentService;
     private final CurrencyRepository currencyRepository;
+    private final MeterRegistry meterRegistry;
 
     /**
      * discussion#41 방안 2 — cancelReservation/rejectByBranch/redeem은 실제 상태 변경을
@@ -109,6 +111,7 @@ public class ReservationService {
                 try {
                     self.expireOnePendingPayment(reservation.getId());
                 } catch (ObjectOptimisticLockingFailureException lockConflict) {
+                    recordOptimisticLockConflict("payment_failure_compensation");
                     log.info("[ReservationService] Stripe 실패 보상 중 낙관적 락 충돌 — 이미 다른 경로(스윕러 등)로 "
                             + "정리된 것으로 판단, reservationId={}", reservation.getId());
                 }
@@ -154,6 +157,7 @@ public class ReservationService {
         try {
             self.doCancelReservation(userId, id);
         } catch (ObjectOptimisticLockingFailureException e) {
+            recordOptimisticLockConflict("user_cancel");
             log.info("[ReservationService] cancelReservation 낙관적 락 충돌 — reservationId={}, userId={}", id, userId);
             Reservation reservation = getReservationOrThrow(id);
             assertOwner(reservation, userId);
@@ -185,6 +189,7 @@ public class ReservationService {
         try {
             self.doRejectByBranch(branchId, reservationId);
         } catch (ObjectOptimisticLockingFailureException e) {
+            recordOptimisticLockConflict("branch_reject");
             log.info("[ReservationService] rejectByBranch 낙관적 락 충돌 — reservationId={}, branchId={}",
                     reservationId, branchId);
             Reservation reservation = getReservationOrThrow(reservationId);
@@ -213,6 +218,7 @@ public class ReservationService {
         try {
             return self.doRedeem(branchId, reservationId, request);
         } catch (ObjectOptimisticLockingFailureException e) {
+            recordOptimisticLockConflict("redeem");
             log.info("[ReservationService] redeem 낙관적 락 충돌 — reservationId={}, branchId={}",
                     reservationId, branchId);
             Reservation reservation = reservationRepository.findById(reservationId)
@@ -316,6 +322,17 @@ public class ReservationService {
         reservation.expireHold();
         restoreStock(reservation);
         restoreTimeSlot(reservation);
+    }
+
+    /**
+     * discussion#41 방안 2 채택 근거("이 레이스가 실제로 얼마나 자주 발생하는가")를 운영에서 관측할 수
+     * 있도록, 낙관적 락 충돌이 잡힐 때마다 발생 지점(source)별로 카운터를 남긴다. 충돌 자체는
+     * 정상적인 흐름(뒤에 도착한 트랜잭션만 재시도 없이 무해하게 실패)이라 알림 대상이 아니다 — 알림이
+     * 필요한 건 이 방어가 실패해 재고·슬롯이 실제로 어긋난 경우이며, 그건
+     * {@link com.fptis.intern.server.application.branch.TimeSlotInventoryReconciler}가 별도로 감시한다.
+     */
+    void recordOptimisticLockConflict(String source) {
+        meterRegistry.counter("reservation.optimistic_lock_conflict", "source", source).increment();
     }
 
     private void restoreStock(Reservation reservation) {

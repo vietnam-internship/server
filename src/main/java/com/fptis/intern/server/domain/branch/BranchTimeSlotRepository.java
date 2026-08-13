@@ -17,6 +17,12 @@ public interface BranchTimeSlotRepository extends JpaRepository<BranchTimeSlot, 
     List<BranchTimeSlot> findAllByBranchIdAndSlotDate(Long branchId, LocalDate slotDate);
 
     /**
+     * 정합성 안전망({@code TimeSlotInventoryReconciler})용 — 이미 지난 슬롯은 더 이상 예약이 몰릴 일이
+     * 없어 검사 대상에서 제외하고, 오늘 이후 슬롯만 훑는다.
+     */
+    List<BranchTimeSlot> findAllBySlotDateGreaterThanEqual(LocalDate slotDate);
+
+    /**
      * 슬롯 행이 없으면 remaining=capacity로 생성하고, 이미 있으면 아무것도 바꾸지 않는다(no-op update).
      * MySQL의 INSERT ... ON DUPLICATE KEY UPDATE는 중복 시에도 해당 행에 배타 락을 잡으므로,
      * 같은 트랜잭션 안에서 뒤이은 {@link #lockForUpdate}가 추가 대기 없이 그 락을 그대로 이어받는다 —

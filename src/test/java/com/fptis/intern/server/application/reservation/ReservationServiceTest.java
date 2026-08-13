@@ -28,6 +28,7 @@ import com.fptis.intern.server.global.exception.BusinessException;
 import com.fptis.intern.server.presentation.reservation.dto.RedeemRequest;
 import com.fptis.intern.server.presentation.reservation.dto.ReservationCreateRequest;
 import com.fptis.intern.server.presentation.reservation.dto.ReservationDetailResponse;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.time.LocalDate;
@@ -121,7 +122,7 @@ class ReservationServiceTest {
                 timingProperties);
         ReservationService service = new ReservationService(reservationRepository, userRepository, branchRepository,
                 branchCurrencyRateRepository, branchTimeSlotRepository, holdService, gatewayPaymentService,
-                currencyRepository, null);
+                currencyRepository, new SimpleMeterRegistry(), null);
         ReflectionTestUtils.setField(service, "self", service);
         return service;
     }
@@ -136,7 +137,7 @@ class ReservationServiceTest {
                 timingProperties);
         reservationService = new ReservationService(reservationRepository, userRepository, branchRepository,
                 branchCurrencyRateRepository, branchTimeSlotRepository, reservationHoldService, paymentService,
-                currencyRepository, null);
+                currencyRepository, new SimpleMeterRegistry(), null);
         // self는 프록시(REQUIRES_NEW 등 트랜잭션 어드바이스)를 타야 하는 필드라 Spring 컨테이너
         // 밖에서 직접 생성할 때는 자기 자신을 그대로 넣는다 — 이 테스트 슬라이스에선 실제
         // REQUIRES_NEW 전파는 검증하지 않고, 낙관적 락 충돌 캐치/멱등 처리 로직만 검증한다.
