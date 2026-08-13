@@ -83,8 +83,9 @@ travelx:
     pickup-hold-hours: ${RESERVATION_PICKUP_HOLD_HOURS:2}
     # ReservationExpirySweeper가 위 두 TTL 만료 건을 정리하러 도는 주기(ms).
     expiry-sweep-interval-ms: ${RESERVATION_EXPIRY_SWEEP_INTERVAL_MS:60000}
-    # TimeSlotInventoryReconciler를 몇 스윕 틱마다 호출할지 — 기본 5틱(60s*5≈5분).
-    inventory-reconcile-every-n-ticks: ${RESERVATION_INVENTORY_RECONCILE_EVERY_N_TICKS:5}
+    # TimeSlotInventoryReconciler(재고 정합성 사후 검증)를 돌리는 주기 — 사람이 만든 도구(복구
+    # 스크립트, 벌크 업데이트 등)가 원인이라 몇 분 안에 잡을 이유가 없어 하루 1회(새벽 3시)로 둔다.
+    inventory-reconcile-cron: ${RESERVATION_INVENTORY_RECONCILE_CRON:0 0 3 * * *}
   notify:
     # 재고 정합성 위반(InventoryConsistencyViolationException) 발생 시 알림 보낼 Discord 웹훅.
     # 미설정 시 DiscordNotifier가 조용히 스킵한다.
