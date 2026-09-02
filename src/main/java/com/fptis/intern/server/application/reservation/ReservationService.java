@@ -23,6 +23,7 @@ import com.fptis.intern.server.presentation.reservation.dto.ReservationCreateReq
 import com.fptis.intern.server.presentation.reservation.dto.ReservationDetailResponse;
 import com.fptis.intern.server.presentation.reservation.dto.ReservationPageResponse;
 import com.fptis.intern.server.presentation.reservation.dto.ReservationSummaryResponse;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
@@ -55,6 +56,7 @@ public class ReservationService {
     private final ReservationHoldService reservationHoldService;
     private final PaymentService paymentService;
     private final CurrencyRepository currencyRepository;
+    private final MeterRegistry meterRegistry;
 
     /**
      * discussion#41 방안 2 — cancelReservation/rejectByBranch/redeem은 실제 상태 변경을
@@ -111,6 +113,7 @@ public class ReservationService {
                 } catch (ObjectOptimisticLockingFailureException lockConflict) {
                     log.info("[ReservationService] Stripe 실패 보상 중 낙관적 락 충돌 — 이미 다른 경로(스윕러 등)로 "
                             + "정리된 것으로 판단, reservationId={}", reservation.getId());
+                    recordOptimisticLockConflict("payment_failure_compensation");
                 }
             }
             // PAYMENT_INTENT_CREATE_OUTCOME_UNKNOWN(타임아웃/Stripe 5xx/idempotency 충돌)은 여기서
@@ -155,6 +158,7 @@ public class ReservationService {
             self.doCancelReservation(userId, id);
         } catch (ObjectOptimisticLockingFailureException e) {
             log.info("[ReservationService] cancelReservation 낙관적 락 충돌 — reservationId={}, userId={}", id, userId);
+            recordOptimisticLockConflict("user_cancel");
             Reservation reservation = getReservationOrThrow(id);
             assertOwner(reservation, userId);
             if (reservation.getStatus() != ReservationStatus.CANCELLED) {
@@ -187,6 +191,7 @@ public class ReservationService {
         } catch (ObjectOptimisticLockingFailureException e) {
             log.info("[ReservationService] rejectByBranch 낙관적 락 충돌 — reservationId={}, branchId={}",
                     reservationId, branchId);
+            recordOptimisticLockConflict("branch_reject");
             Reservation reservation = getReservationOrThrow(reservationId);
             if (!reservation.getBranchId().equals(branchId)) {
                 throw new BusinessException(BusinessErrorCode.RESERVATION_NOT_FOUND);
@@ -215,6 +220,7 @@ public class ReservationService {
         } catch (ObjectOptimisticLockingFailureException e) {
             log.info("[ReservationService] redeem 낙관적 락 충돌 — reservationId={}, branchId={}",
                     reservationId, branchId);
+            recordOptimisticLockConflict("redeem");
             Reservation reservation = reservationRepository.findById(reservationId)
                     .orElseThrow(() -> new BusinessException(BusinessErrorCode.RESERVATION_NOT_FOUND));
             if (!reservation.getBranchId().equals(branchId)) {
@@ -316,6 +322,15 @@ public class ReservationService {
         reservation.expireHold();
         restoreStock(reservation);
         restoreTimeSlot(reservation);
+    }
+
+    /**
+     * discussion-reservation-optimistic-lock-observability.md 방안 1 — "충돌이 저확률"이라는
+     * discussion#41의 전제를 추정이 아니라 실측으로 검증하기 위한 카운터. package-private으로
+     * 열어 같은 패키지의 {@link ReservationExpirySweeper}(sweep_overdue/sweep_pending)도 호출한다.
+     */
+    void recordOptimisticLockConflict(String source) {
+        meterRegistry.counter("reservation.optimistic_lock_conflict", "source", source).increment();
     }
 
     private void restoreStock(Reservation reservation) {

@@ -30,6 +30,7 @@ public class ReservationExpirySweeper {
             } catch (ObjectOptimisticLockingFailureException e) {
                 log.info("[ReservationExpirySweeper] 픽업 홀드 만료 처리 중 낙관적 락 충돌 — 다른 요청이 먼저 "
                         + "처리함(취소 등), reservationId={}", id);
+                reservationService.recordOptimisticLockConflict("sweep_overdue");
             }
         }
         for (Long id : reservationService.findOverduePendingPaymentIds()) {
@@ -38,6 +39,7 @@ public class ReservationExpirySweeper {
             } catch (ObjectOptimisticLockingFailureException e) {
                 log.info("[ReservationExpirySweeper] 결제 홀드 만료 처리 중 낙관적 락 충돌 — 다른 요청이 먼저 "
                         + "처리함, reservationId={}", id);
+                reservationService.recordOptimisticLockConflict("sweep_pending");
             }
         }
     }
